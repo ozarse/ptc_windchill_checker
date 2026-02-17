@@ -1,0 +1,76 @@
+[
+  {
+    "name": "pdp_ifu_regulatory_class_match",
+    "description": "Part PDP and IFU Document must have the same RegulatoryClass",
+    "source_type": "Part PDP",
+    "target_type": "IFU Document",
+    "match_on": "Number",
+    "comparisons": [
+      {
+        "source_attr": "RegulatoryClass",
+        "target_attr": "RegulatoryClass",
+        "operator": "equals"
+      }
+    ]
+  },
+  {
+    "name": "released_parts_need_approval_date",
+    "description": "When a Part PDP is Released, its ApprovalDate must not be empty",
+    "source_type": "Part PDP",
+    "target_type": "Part PDP",
+    "match_on": "Number",
+    "comparisons": [
+      {
+        "source_attr": "ApprovalDate",
+        "operator": "not_empty",
+        "when": {
+          "attr": "State.Value",
+          "operator": "equals",
+          "value": "Released"
+        }
+      }
+    ]
+  },
+  {
+    "name": "part_number_format",
+    "description": "Part PDP Number must match standard format (2-4 uppercase letters, dash, 4-6 digits)",
+    "source_type": "Part PDP",
+    "target_type": "Part PDP",
+    "match_on": "Number",
+    "comparisons": [
+      {
+        "source_attr": "Number",
+        "operator": "matches",
+        "value": "^[A-Z]{2,4}-\\d{4,6}$"
+      }
+    ]
+  },
+  {
+    "name": "config_options_version_positive",
+    "description": "Config Options PDP VersionNumber must be greater than 0",
+    "source_type": "Config Options PDP",
+    "target_type": "Config Options PDP",
+    "match_on": "Number",
+    "comparisons": [
+      {
+        "source_attr": "VersionNumber",
+        "operator": "greater_than",
+        "value": "0"
+      }
+    ]
+  },
+  {
+    "name": "ifu_modified_after_baseline",
+    "description": "IFU Documents must have been modified after the 2024-01-01 baseline",
+    "source_type": "IFU Document",
+    "target_type": "IFU Document",
+    "match_on": "Number",
+    "comparisons": [
+      {
+        "source_attr": "LastModified",
+        "operator": "after",
+        "value": "2024-01-01"
+      }
+    ]
+  }
+]

@@ -1,0 +1,38 @@
+[
+  {
+    "human_name": "Config Options PDP",
+    "windchill_type": "PTC.ProdMgmt.ProductDefinitionPart",
+    "api_endpoint": "v6/ProdMgmt/Parts/PTC.ProdMgmt.ProductDefinitionPart",
+    "domain": "v6/ProdMgmt",
+    "collection": "Parts",
+    "classify_attr": "ConfigurableModule.Value",
+    "classify_value": "Yes",
+    "attributes": []
+  },
+  {
+    "human_name": "Part PDP",
+    "windchill_type": "PTC.ProdMgmt.ProductDefinitionPart",
+    "api_endpoint": "v6/ProdMgmt/Parts/PTC.ProdMgmt.ProductDefinitionPart",
+    "domain": "v6/ProdMgmt",
+    "collection": "Parts",
+    "classify_attr": "ConfigurableModule.Value",
+    "classify_value": "No",
+    "attributes": []
+  },
+  {
+    "human_name": "IFU Document",
+    "windchill_type": "PTC.DocMgmt.IFUDrawing",
+    "api_endpoint": "v6/DocMgmt/Documents/PTC.DocMgmt.IFUDrawing",
+    "domain": "v6/DocMgmt",
+    "collection": "Documents",
+    "attributes": []
+  },
+  {
+    "human_name": "Product Design",
+    "windchill_type": "PTC.DocMgmt.ProductDesign",
+    "api_endpoint": "v6/DocMgmt/Documents/PTC.DocMgmt.ProductDesign",
+    "domain": "v6/DocMgmt",
+    "collection": "Documents",
+    "attributes": []
+  }
+]

@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+dist/
+build/
+data/oneplm.db
+data/pdfs/
+*.csv
+.env
+spec/
+nul
