@@ -60,13 +60,15 @@ export ONEPLM_BASE_URL=https://your-host/Windchill/servlet/odata
 
 ```bash
 .venv/Scripts/oneplm --help
-.venv/Scripts/oneplm -v <command>   # verbose/debug logging
+.venv/Scripts/oneplm --dry-run sync    # log API calls without making them
+.venv/Scripts/oneplm -v <command>      # verbose: adds response status, timing, pagination
 ```
 
 Common workflow:
 ```bash
 oneplm auth login          # store credentials in Windows keyring
 oneplm init                # create DB tables
+oneplm --dry-run sync      # preview the API calls sync would make
 oneplm sync                # fetch all types from Windchill
 oneplm check               # run all validation rules
 oneplm export checks -o results.csv
@@ -107,6 +109,9 @@ Attributes are stored as a JSON blob (`attributes_json`) and accessed with dot n
 - CSRF token from `v4/PTC`
 - Pagination via `@odata.nextLink`
 - Incremental sync: filters by `LastModified gt <last_sync_at>`
+- `dry_run=True` — logs every request at INFO level and returns empty results without hitting the network
+
+Every outgoing request is logged at INFO (URL + query params). Response status and elapsed time are logged at DEBUG (visible with `-v`).
 
 Key endpoints:
 - Documents: `v6/DocMgmt/Documents/PTC.DocMgmt.<Type>`
@@ -134,7 +139,7 @@ Comparisons support an optional `when` precondition evaluated against the source
 
 All CLI commands are in [cli.py](src/oneplm_ingestion/cli.py). Heavy imports (especially `docling`) are deferred inside command functions to keep startup fast.
 
-Global options (`--db`, `--data-dir`, `-v`) are passed via `click.pass_context` and stored in `ctx.obj`.
+Global options (`--db`, `--data-dir`, `-v`, `--dry-run`) are passed via `click.pass_context` and stored in `ctx.obj`. Commands that construct `WindchillClient` read `ctx.obj["dry_run"]` and forward it.
 
 ## Key Conventions
 
@@ -151,3 +156,4 @@ Global options (`--db`, `--data-dir`, `-v`) are passed via `click.pass_context` 
 | `ONEPLM_BASE_URL` | (required) | Windchill OData base URL |
 | `ONEPLM_DB_PATH` | `data/oneplm.db` | SQLite database path |
 | `ONEPLM_DATA_DIR` | `data/` | Directory for downloaded files |
+| `ONEPLM_DRY_RUN` | `0` | Set to `1` to enable dry-run mode (same as `--dry-run`) |

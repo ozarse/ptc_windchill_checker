@@ -19,8 +19,10 @@ DEFAULT_CHECKS_CONFIG = Path("./config/checks.json")
 @click.option("--data-dir", default=str(DEFAULT_DATA_DIR), envvar="ONEPLM_DATA_DIR",
               help="Directory for downloaded files.")
 @click.option("-v", "--verbose", is_flag=True, help="Enable debug logging.")
+@click.option("--dry-run", is_flag=True, envvar="ONEPLM_DRY_RUN",
+              help="Log API calls without making them. No data is written.")
 @click.pass_context
-def cli(ctx, db, data_dir, verbose):
+def cli(ctx, db, data_dir, verbose, dry_run):
     """oneplm - Windchill PLM data ingestion and validation tool."""
     logging.basicConfig(
         level=logging.DEBUG if verbose else logging.INFO,
@@ -29,6 +31,10 @@ def cli(ctx, db, data_dir, verbose):
     ctx.ensure_object(dict)
     ctx.obj["db_path"] = Path(db)
     ctx.obj["data_dir"] = Path(data_dir)
+    ctx.obj["dry_run"] = dry_run
+    if dry_run:
+        import logging as _logging
+        _logging.getLogger("oneplm_ingestion.api").info("[dry-run mode] no requests will be made")
 
 
 # ---------------------------------------------------------------------------
@@ -149,7 +155,7 @@ def lookup(ctx, number):
     from oneplm_ingestion.api import WindchillClient
     from oneplm_ingestion.lookup import format_lookup_result, lookup_by_number
 
-    client = WindchillClient()
+    client = WindchillClient(dry_run=ctx.obj["dry_run"])
     result = lookup_by_number(client, number)
     click.echo(format_lookup_result(result))
 
@@ -173,7 +179,7 @@ def sync(ctx, types_config, type_names, full):
 
     conn = get_connection(ctx.obj["db_path"])
     init_db(conn)
-    client = WindchillClient()
+    client = WindchillClient(dry_run=ctx.obj["dry_run"])
     results = sync_all(
         client, conn, Path(types_config),
         types=list(type_names) if type_names else None,
@@ -207,7 +213,7 @@ def pdf_download(ctx, type_name, object_id, types_config):
     from oneplm_ingestion.sync import load_type_configs
 
     conn = get_connection(ctx.obj["db_path"])
-    client = WindchillClient()
+    client = WindchillClient(dry_run=ctx.obj["dry_run"])
 
     if object_id:
         pdfs = download_pdfs_for_object(client, conn, object_id, ctx.obj["data_dir"])

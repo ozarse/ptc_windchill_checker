@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 
 import requests
 from requests.auth import HTTPBasicAuth
@@ -29,10 +30,16 @@ COMMON = "v4/PTC"
 class WindchillClient:
     """HTTP client for the Windchill OData API."""
 
-    def __init__(self, base_url: str | None = None, auth: HTTPBasicAuth | None = None):
+    def __init__(
+        self,
+        base_url: str | None = None,
+        auth: HTTPBasicAuth | None = None,
+        dry_run: bool = False,
+    ):
         self.base_url = (base_url or os.environ.get("ONEPLM_BASE_URL", "")).rstrip("/")
         if not self.base_url:
             raise ValueError("ONEPLM_BASE_URL env variable not set and no base_url provided")
+        self.dry_run = dry_run
         self.auth = auth or get_basic_auth()
         self.session = requests.Session()
         self.session.auth = self.auth
@@ -40,11 +47,25 @@ class WindchillClient:
         # VPN is slow — generous timeouts (connect=30s, read=120s)
         self.timeout = (30, 120)
 
+    def _log_request(self, method: str, url: str, params: dict | None) -> None:
+        """Log an outgoing request at INFO level."""
+        if params:
+            param_str = "&".join(f"{k}={v}" for k, v in params.items())
+            log.info("%s %s?%s", method, url, param_str)
+        else:
+            log.info("%s %s", method, url)
+
     def get(self, endpoint: str, params: dict | None = None) -> dict:
         """GET request, return parsed JSON."""
         url = f"{self.base_url}/{endpoint.lstrip('/')}"
-        log.debug("GET %s params=%s", url, params)
+        self._log_request("GET", url, params)
+        if self.dry_run:
+            log.info("  [dry-run] skipping request")
+            return {}
+        t0 = time.monotonic()
         resp = self.session.get(url, params=params, timeout=self.timeout)
+        elapsed = time.monotonic() - t0
+        log.debug("  -> %s in %.2fs", resp.status_code, elapsed)
         resp.raise_for_status()
         return resp.json()
 
@@ -52,6 +73,7 @@ class WindchillClient:
         """GET a paginated OData collection, follow @odata.nextLink, return all items."""
         all_items = []
         current_params = dict(params or {})
+        page = 1
         while True:
             data = self.get(endpoint, current_params)
             items = data.get("value", [])
@@ -59,12 +81,15 @@ class WindchillClient:
             next_link = data.get("@odata.nextLink")
             if not next_link:
                 break
+            page += 1
+            log.debug("  fetching page %d (%d items so far)...", page, len(all_items))
             # nextLink can be absolute or relative
             if next_link.startswith("http"):
                 endpoint = next_link.replace(self.base_url, "").lstrip("/")
             else:
                 endpoint = next_link
             current_params = {}  # params are baked into nextLink
+        log.debug("  collection done: %d total items", len(all_items))
         return all_items
 
     # ------------------------------------------------------------------
@@ -178,7 +203,11 @@ class WindchillClient:
 
     def download_file(self, url: str, dest_path: str) -> str:
         """Download a file to dest_path. Returns dest_path."""
-        log.info("Downloading %s -> %s", url, dest_path)
+        self._log_request("GET (download)", url, None)
+        log.info("  -> saving to %s", dest_path)
+        if self.dry_run:
+            log.info("  [dry-run] skipping download")
+            return dest_path
         resp = self.session.get(url, stream=True, timeout=self.timeout)
         resp.raise_for_status()
         with open(dest_path, "wb") as f:

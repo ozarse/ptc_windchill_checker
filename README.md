@@ -59,7 +59,19 @@ These go before the subcommand:
 
 - `--db <path>` -- Path to SQLite database (default: `data/oneplm.db`)
 - `--data-dir <path>` -- Directory for downloaded files (default: `data/`)
-- `-v` / `--verbose` -- Enable debug logging
+- `-v` / `--verbose` -- Enable debug logging (response status, timing, pagination)
+- `--dry-run` -- Log every API call that would be made without sending any requests (also set via `ONEPLM_DRY_RUN=1`)
+
+```bash
+# See exactly which API calls a sync would make, without touching Windchill
+oneplm --dry-run sync
+
+# Same for a lookup
+oneplm --dry-run lookup ABC-1234
+
+# Add -v to also see pagination and timing details
+oneplm -v sync
+```
 
 ---
 
