@@ -137,25 +137,36 @@ def sync_all(
     client: WindchillClient,
     conn,
     config_path: Path,
+    containers_config_path: Path | None = None,
     types: list[str] | None = None,
     full: bool = False,
 ) -> dict[str, int]:
-    """Sync all (or specified) types. Returns {type_name: count}.
+    """Sync all (or specified) types, then folders if containers config exists.
 
+    Returns {type_name: count} plus {folders/<label>: count} entries.
     Groups type configs by api_endpoint to avoid duplicate API calls.
     """
-    type_configs = load_type_configs(config_path)
-    if types:
-        type_configs = [tc for tc in type_configs if tc.human_name in types]
+    all_type_configs = load_type_configs(config_path)
+    active_configs = (
+        [tc for tc in all_type_configs if tc.human_name in types] if types else all_type_configs
+    )
 
     # Group by endpoint to deduplicate API calls
     by_endpoint: dict[str, list[TypeConfig]] = defaultdict(list)
-    for tc in type_configs:
+    for tc in active_configs:
         by_endpoint[tc.api_endpoint].append(tc)
 
     results: dict[str, int] = {}
     for endpoint, configs in by_endpoint.items():
         counts = sync_endpoint(client, conn, endpoint, configs, full=full)
         results.update(counts)
+
+    if containers_config_path and containers_config_path.exists():
+        from oneplm_ingestion.folders import sync_folders
+        # Pass the full (unfiltered) type configs so folder sync can fetch any object type
+        folder_results = sync_folders(client, conn, containers_config_path, all_type_configs)
+        for label, count in folder_results.items():
+            log.info("Synced %d folders for container '%s'", count, label)
+        results.update({f"folders/{k}": v for k, v in folder_results.items()})
 
     return results

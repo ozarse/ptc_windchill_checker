@@ -24,6 +24,7 @@ log = logging.getLogger(__name__)
 # Domain base paths (relative to ONEPLM_BASE_URL)
 DOCMGMT = "v6/DocMgmt"
 PRODMGMT = "v6/ProdMgmt"
+DATAADMIN = "v6/DataAdmin"
 COMMON = "v4/PTC"
 
 
@@ -200,6 +201,20 @@ class WindchillClient:
                 })
 
         return results
+
+    # ------------------------------------------------------------------
+    # Folders
+    # ------------------------------------------------------------------
+
+    def get_folders(self, container_id: str) -> list[dict]:
+        """List all folders in a container."""
+        return self.get_collection(f"{DATAADMIN}/Containers('{container_id}')/Folders")
+
+    def get_folder_contents(self, container_id: str, folder_id: str) -> list[dict]:
+        """List contents (documents/parts) of a folder."""
+        return self.get_collection(
+            f"{DATAADMIN}/Containers('{container_id}')/Folders('{folder_id}')/FolderContents"
+        )
 
     def download_file(self, url: str, dest_path: str) -> str:
         """Download a file to dest_path. Returns dest_path."""

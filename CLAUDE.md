@@ -15,16 +15,19 @@ src/oneplm_ingestion/   # All source modules
   api.py                # WindchillClient — HTTP requests to Windchill OData API
   auth.py               # Credential storage/retrieval via keyring
   db.py                 # SQLite schema, connection, and CRUD helpers
-  sync.py               # Fetches objects from API and upserts into DB
+  sync.py               # Fetches objects by type from API and upserts into DB
+  folders.py            # Folder hierarchy sync and per-item object/relationship fetch
+  relationships.py      # Fetches and stores per-object relationships (attachments, etc.)
   pdf.py                # PDF download and docling text extraction
   checks.py             # Loads checks.json, runs comparisons, saves results
   export.py             # CSV export for objects and check results
   lookup.py             # Interactive lookup by number, follows relationships
-  models.py             # Dataclasses: WindchillObject, PDFContent, CheckResult
+  models.py             # Dataclasses: WindchillObject, Folder, PDFContent, CheckResult
   dataframe.py          # Pandas helpers for notebook/exploration use
 config/
   types.json            # Object type definitions (human names → Windchill types)
   checks.json           # Validation rule definitions
+  containers.json       # Windchill container IDs to sync folders from
 data/
   oneplm.db             # SQLite database (gitignored)
   pdfs/                 # Downloaded PDFs (gitignored)
@@ -69,7 +72,7 @@ Common workflow:
 oneplm auth login          # store credentials in Windows keyring
 oneplm init                # create DB tables
 oneplm --dry-run sync      # preview the API calls sync would make
-oneplm sync                # fetch all types from Windchill
+oneplm sync                # fetch all types + walk container folders
 oneplm check               # run all validation rules
 oneplm export checks -o results.csv
 ```
@@ -89,11 +92,13 @@ Ruff is configured in `pyproject.toml`: line length 120, target Python 3.10.
 
 ### Database
 
-Four tables in `data/oneplm.db`:
+Six tables in `data/oneplm.db`:
 
 | Table | Purpose |
 |---|---|
-| `objects` | Windchill objects; full API response stored as `attributes_json` |
+| `objects` | Windchill objects; full API response stored as `attributes_json`; `folder_id` FK to folders |
+| `folders` | Windchill folder hierarchy; `parent_folder_id` self-FK; `location` stores full path |
+| `relationships` | Per-object relationship metadata (attachments, DescribedBy links, DocUsageLinks, PartDocAssociations) |
 | `pdfs` | Downloaded PDF metadata and extracted text |
 | `check_results` | One row per comparison result |
 | `sync_log` | Last sync timestamp per type |
@@ -117,7 +122,9 @@ Key endpoints:
 - Documents: `v6/DocMgmt/Documents/PTC.DocMgmt.<Type>`
 - Parts: `v6/ProdMgmt/Parts/PTC.ProdMgmt.ProductDefinitionPart`
 - PDF content: `Documents('{id}')/PrimaryContent` and `/Attachments`
-- Relationships: `Parts('{id}')/DescribedBy`, `Documents('{id}')/DocUsageLinks`
+- Relationships: `Parts('{id}')/DescribedBy`, `Documents('{id}')/DocUsageLinks`, `Parts('{id}')/PartDocAssociations`
+- Folders: `v6/DataAdmin/Containers('{id}')/Folders`
+- Folder contents: `v6/DataAdmin/Containers('{id}')/Folders('{fid}')/FolderContents`
 
 ### Object Types
 
@@ -126,6 +133,32 @@ Defined in [config/types.json](config/types.json). Each entry has:
 - `windchill_type` — OData type string
 - `api_endpoint` — URL path fragment
 - `classify_attr` / `classify_value` — optional filter to distinguish subtypes (e.g., Config Options PDP vs. Part PDP both use `ProductDefinitionPart` but differ by `ConfigurableModule.Value`)
+
+### Folder & Relationship Sync
+
+Configured via [config/containers.json](config/containers.json) — a list of Windchill container OIDs (e.g. `"OR:wt.inf.library.WTLibrary:10115144708"`) and human labels.
+
+The folder sync runs automatically at the end of `oneplm sync` when `containers.json` exists. The sequence per container:
+
+1. `GET /v6/DataAdmin/Containers('{id}')/Folders` — fetches all folders (flat list)
+2. Hierarchy is derived from each folder's `Location` path (e.g. `/Default/SubA/SubB` → `parent_folder_id` points to `/Default/SubA`)
+3. All folders are upserted into the `folders` table
+4. For each folder, `GET .../FolderContents` is called
+5. For each content item:
+   - If not in `objects`: fetch the full object from its type endpoint and store it (uses `@odata.type` to determine the endpoint; falls back to storing basic FolderContent metadata for unknown types)
+   - Set `objects.folder_id` to this folder
+   - Fetch and store relationships (see below)
+
+**Relationship types** stored per object domain:
+
+| Domain | Relationships fetched |
+|---|---|
+| `v6/DocMgmt` (Documents) | `attachment`, `doc_usage_link` |
+| `v6/ProdMgmt` (Parts) | `attachment`, `described_by`, `part_doc_assoc` |
+
+Each relationship type is refreshed with delete-then-insert per `(source_id, rel_type)`.
+
+Use `--no-folders` to skip folder sync for a run. Use `--containers-config <path>` to point at a different config file.
 
 ### Validation Checks
 
@@ -141,12 +174,16 @@ All CLI commands are in [cli.py](src/oneplm_ingestion/cli.py). Heavy imports (es
 
 Global options (`--db`, `--data-dir`, `-v`, `--dry-run`) are passed via `click.pass_context` and stored in `ctx.obj`. Commands that construct `WindchillClient` read `ctx.obj["dry_run"]` and forward it.
 
+### Circular Import Avoidance
+
+`sync.py` imports `folders.py` lazily (inside `sync_all`). `folders.py` imports from `sync.py` inside `_sync_folder_contents` (also deferred). This prevents a circular import at module load time while keeping the code organized.
+
 ## Key Conventions
 
 - **No shell calls** — all file I/O uses `pathlib.Path`; no `subprocess` or `os.system`
 - **Deferred imports** — import heavy modules inside Click command functions, not at module top level
 - **Explicit connections** — callers open and close `sqlite3.Connection`; DB functions never open their own connections
-- **Upsert pattern** — objects and PDFs use `INSERT ... ON CONFLICT DO UPDATE`; check results delete-then-insert per check name
+- **Upsert pattern** — objects, folders use `INSERT ... ON CONFLICT DO UPDATE`; check results and relationships delete-then-insert per (key, type)
 - **Dot notation for attributes** — `get_nested(obj.attributes, "State.Value")` handles nested OData fields
 
 ## Environment Variables

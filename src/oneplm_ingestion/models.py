@@ -68,6 +68,21 @@ class TypeConfig:
 
 
 @dataclass
+class Folder:
+    """A folder in the Windchill container/folder hierarchy."""
+
+    id: str
+    container_id: str
+    name: str
+    location: str | None  # Full path, e.g. "/Default/SubA"
+    parent_folder_id: str | None = None
+    description: str | None = None
+    created_on: str | None = None
+    last_modified: str | None = None
+    synced_at: str = ""
+
+
+@dataclass
 class WhenCondition:
     """Precondition that must be met for a comparison to run."""
 

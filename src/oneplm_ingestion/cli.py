@@ -11,6 +11,7 @@ DEFAULT_DATA_DIR = Path("./data")
 DEFAULT_DB_PATH = DEFAULT_DATA_DIR / "oneplm.db"
 DEFAULT_TYPES_CONFIG = Path("./config/types.json")
 DEFAULT_CHECKS_CONFIG = Path("./config/checks.json")
+DEFAULT_CONTAINERS_CONFIG = Path("./config/containers.json")
 
 
 @click.group()
@@ -167,12 +168,15 @@ def lookup(ctx, number):
 
 @cli.command()
 @click.option("--types-config", default=str(DEFAULT_TYPES_CONFIG), help="Path to types.json")
+@click.option("--containers-config", default=str(DEFAULT_CONTAINERS_CONFIG),
+              help="Path to containers.json for folder sync.")
 @click.option("--type", "type_names", multiple=True,
               help="Sync only these types (by human name). Repeatable.")
 @click.option("--full", is_flag=True, help="Full sync (ignore last_modified, fetch everything).")
+@click.option("--no-folders", is_flag=True, help="Skip folder sync even if containers.json exists.")
 @click.pass_context
-def sync(ctx, types_config, type_names, full):
-    """Sync objects from Windchill into local database."""
+def sync(ctx, types_config, containers_config, type_names, full, no_folders):
+    """Sync objects from Windchill into local database, then sync folder hierarchy."""
     from oneplm_ingestion.api import WindchillClient
     from oneplm_ingestion.db import get_connection, init_db
     from oneplm_ingestion.sync import sync_all
@@ -180,13 +184,15 @@ def sync(ctx, types_config, type_names, full):
     conn = get_connection(ctx.obj["db_path"])
     init_db(conn)
     client = WindchillClient(dry_run=ctx.obj["dry_run"])
+    containers_path = None if no_folders else Path(containers_config)
     results = sync_all(
         client, conn, Path(types_config),
+        containers_config_path=containers_path,
         types=list(type_names) if type_names else None,
         full=full,
     )
     for type_name, count in results.items():
-        click.echo(f"  {type_name}: {count} objects synced")
+        click.echo(f"  {type_name}: {count} synced")
     conn.close()
 
 
