@@ -1,8 +1,10 @@
-"""Folder sync — fetches the folder hierarchy from Windchill containers and stores it in SQLite.
+"""Folder sync — fetches the complete folder hierarchy from Windchill containers.
 
-The hierarchy is walked recursively:
-  1. GET /Containers('{id}')/Folders               → top-level folders in the container
-  2. GET /Containers('{id}')/Folders('{fid}')/Folders → subfolders of a given folder (repeat)
+A single API call per container retrieves the full tree:
+  GET /v6/DataAdmin/Containers('{id}')/Folders?$expand=Folders($levels=max)
+
+The nested response is then walked locally to upsert every folder with the
+correct parent_folder_id.
 """
 
 from __future__ import annotations
@@ -41,7 +43,7 @@ def sync_folders(client, conn, containers_config_path: Path) -> dict[str, int]:
 
 
 def _sync_container(client, conn, container_id: str, label: str) -> int:
-    """Walk the full folder tree for one container and upsert every folder found."""
+    """Fetch the full folder tree for one container and upsert every folder."""
     now = datetime.now(timezone.utc).isoformat()
 
     top_level = client.get_folders(container_id)
@@ -49,43 +51,30 @@ def _sync_container(client, conn, container_id: str, label: str) -> int:
         log.info("  No folders returned for container '%s'", label)
         return 0
 
-    total = 0
-    for raw in top_level:
-        folder_id = str(raw.get("ID", ""))
-        if not folder_id:
-            continue
-        folder = _make_folder(raw, container_id, parent_folder_id=None, now=now)
-        upsert_folder(conn, folder)
-        total += 1
-        total += _fetch_subfolders_recursive(client, conn, container_id, folder_id, now)
-
+    total = _walk_folder_tree(conn, container_id, top_level, parent_folder_id=None, now=now)
     conn.commit()
     log.info("  Upserted %d folders for container '%s'", total, label)
     return total
 
 
-def _fetch_subfolders_recursive(
-    client, conn, container_id: str, parent_folder_id: str, now: str
+def _walk_folder_tree(
+    conn, container_id: str, folders: list[dict], parent_folder_id: str | None, now: str
 ) -> int:
-    """Recursively fetch and upsert subfolders of a given folder.
+    """Recursively walk the nested folder tree returned by $expand=Folders($levels=max).
 
-    Returns the total number of folders inserted at this level and below.
+    Each folder dict may contain a 'Folders' key with its children already embedded.
     """
-    subfolders = client.get_subfolders(container_id, parent_folder_id)
-    if not subfolders:
-        log.debug("    No subfolders for folder %s", parent_folder_id)
-        return 0
-
     count = 0
-    for raw in subfolders:
+    for raw in folders:
         folder_id = str(raw.get("ID", ""))
         if not folder_id:
             continue
         folder = _make_folder(raw, container_id, parent_folder_id=parent_folder_id, now=now)
         upsert_folder(conn, folder)
         count += 1
-        count += _fetch_subfolders_recursive(client, conn, container_id, folder_id, now)
-
+        children = raw.get("Folders") or []
+        if children:
+            count += _walk_folder_tree(conn, container_id, children, parent_folder_id=folder_id, now=now)
     return count
 
 

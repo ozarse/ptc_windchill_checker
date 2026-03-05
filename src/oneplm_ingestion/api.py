@@ -207,13 +207,10 @@ class WindchillClient:
     # ------------------------------------------------------------------
 
     def get_folders(self, container_id: str) -> list[dict]:
-        """List all folders in a container."""
-        return self.get_collection(f"{DATAADMIN}/Containers('{container_id}')/Folders")
-
-    def get_subfolders(self, container_id: str, folder_id: str) -> list[dict]:
-        """List direct subfolders of a folder."""
+        """List all folders in a container with the full hierarchy expanded in one call."""
         return self.get_collection(
-            f"{DATAADMIN}/Containers('{container_id}')/Folders('{folder_id}')/Folders"
+            f"{DATAADMIN}/Containers('{container_id}')/Folders",
+            params={"$expand": "Folders($levels=max)"},
         )
 
     def get_folder_contents(self, container_id: str, folder_id: str) -> list[dict]:

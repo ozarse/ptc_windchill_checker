@@ -124,8 +124,7 @@ Key endpoints:
 - Parts: `v6/ProdMgmt/Parts/PTC.ProdMgmt.ProductDefinitionPart`
 - PDF content: `Documents('{id}')/PrimaryContent` and `/Attachments`
 - Relationships: `Parts('{id}')/DescribedBy`, `Documents('{id}')/DocUsageLinks`, `Parts('{id}')/PartDocAssociations`
-- Folders (top-level): `v6/DataAdmin/Containers('{id}')/Folders`
-- Subfolders: `v6/DataAdmin/Containers('{id}')/Folders('{fid}')/Folders`
+- Folders (full tree): `v6/DataAdmin/Containers('{id}')/Folders?$expand=Folders($levels=max)`
 - Folder contents: `v6/DataAdmin/Containers('{id}')/Folders('{fid}')/FolderContents`
 
 ### Object Types
@@ -142,10 +141,8 @@ Configured via [config/containers.json](config/containers.json) — a list of Wi
 
 Run with `oneplm sync folder`. The sequence per container:
 
-1. `GET /v6/DataAdmin/Containers('{id}')/Folders` — fetches top-level folders
-2. For each folder: `GET .../Folders('{fid}')/Folders` — fetches its direct subfolders
-3. Steps 2 recurses until no more subfolders are found
-4. Each folder is upserted into `folders` with `parent_folder_id` set directly from the recursion
+1. `GET /v6/DataAdmin/Containers('{id}')/Folders?$expand=Folders($levels=max)` — fetches the complete folder tree in a single call
+2. The nested response is walked locally; each folder is upserted with `parent_folder_id` derived from its position in the tree
 
 Use `--containers-config <path>` to point at a different config file.
 
