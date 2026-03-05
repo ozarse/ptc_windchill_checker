@@ -72,13 +72,13 @@ def _sync_container(
     conn.commit()
     log.info("  Upserted %d folders for container '%s'", len(folder_entries), label)
 
-    # Fetch and store contents of every folder
+    # Fetch and store contents of every folder, committing after each
     total_objects = 0
     for folder_id, folder_path in folder_entries:
         total_objects += _sync_folder_contents(
             client, conn, container_id, folder_id, folder_path, by_windchill_type, now
         )
-    conn.commit()
+        conn.commit()
     log.info(
         "  Stored %d objects across %d folders for container '%s'",
         total_objects, len(folder_entries), label,
