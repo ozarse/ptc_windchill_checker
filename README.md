@@ -31,9 +31,12 @@ oneplm auth login
 # Initialize the local database
 oneplm init
 
+# Sync typed objects (documents, parts)
+oneplm sync objects
+
 # Edit config/containers.json with your real container ID(s)
-# then sync — fetches all typed objects AND walks the folder hierarchy
-oneplm sync
+# then sync the folder hierarchy
+oneplm sync folder
 
 # Run validation checks
 oneplm check
@@ -51,7 +54,8 @@ oneplm export checks -o check_results.csv
 | `oneplm auth login` | Store Windchill credentials in the system keyring |
 | `oneplm auth logout` | Remove stored credentials |
 | `oneplm auth status` | Check if credentials are stored |
-| `oneplm sync` | Sync typed objects + folder hierarchy + relationships from Windchill |
+| `oneplm sync objects` | Sync typed objects (documents, parts) from Windchill |
+| `oneplm sync folder` | Sync folder hierarchy recursively from configured containers |
 | `oneplm lookup <number>` | Look up a document or part by number and show relationships |
 | `oneplm check` | Run validation checks against local data |
 | `oneplm pdf download` | Download PDFs from Windchill |
@@ -70,30 +74,35 @@ These go before the subcommand:
 
 ```bash
 # See exactly which API calls a sync would make, without touching Windchill
-oneplm --dry-run sync
+oneplm --dry-run sync objects
+oneplm --dry-run sync folder
 
 # Same for a lookup
 oneplm --dry-run lookup ABC-1234
 
 # Add -v to also see pagination and timing details
-oneplm -v sync
+oneplm -v sync objects
 ```
 
 ### Sync Options
 
 ```bash
-oneplm sync                                    # full sync: objects + folders + relationships
-oneplm sync --no-folders                       # skip folder/relationship sync
-oneplm sync --type "IFU Document"              # sync only one object type (folders still run)
-oneplm sync --full                             # ignore last_modified, re-fetch everything
-oneplm sync --containers-config path/to/other.json  # use a different containers file
+# Object sync
+oneplm sync objects                            # sync all typed objects
+oneplm sync objects --type "IFU Document"      # sync only one object type
+oneplm sync objects --full                     # ignore last_modified, re-fetch everything
+oneplm sync objects --types-config path/to/types.json
+
+# Folder sync
+oneplm sync folder                             # sync folder hierarchy from containers.json
+oneplm sync folder --containers-config path/to/other.json
 ```
 
 ---
 
-## Folder & Relationship Sync
+## Folder Sync
 
-When `config/containers.json` exists and lists at least one container ID, `oneplm sync` automatically walks the folder hierarchy and fetches relationships for every object it finds.
+`oneplm sync folder` walks the complete folder hierarchy for each container configured in `config/containers.json`.
 
 ### Container Configuration
 
@@ -110,37 +119,23 @@ Edit `config/containers.json` with your Windchill container OID(s):
 
 The `id` is the Windchill OID as it appears in URLs. The `label` is only used in log output.
 
+### Traversal Strategy
+
+The folder tree is walked recursively via two API endpoints:
+
+1. `GET /v6/DataAdmin/Containers('{id}')/Folders` — fetches the top-level folders in the container
+2. `GET /v6/DataAdmin/Containers('{id}')/Folders('{fid}')/Folders` — fetches subfolders of a given folder
+
+Each folder is upserted into the `folders` table as it is discovered. `parent_folder_id` is set directly from the recursion, so hierarchy is always accurate regardless of how `Location` paths are formatted.
+
 ### What Gets Stored
 
-**`folders` table** — the full folder hierarchy for each container. Each row has:
+**`folders` table** — each row has:
 
-- `name`, `location` (full path, e.g. `/Default/SubA/SubB`)
-- `parent_folder_id` — self-referencing FK derived from the `Location` path
+- `id` — Windchill folder ID
+- `name`, `location` (full path from the API, e.g. `/Default/SubA/SubB`)
+- `parent_folder_id` — self-referencing FK set during recursive traversal
 - `container_id` — which container this folder belongs to
-
-**`objects` table** — gains a `folder_id` column pointing to the folder each object lives in.
-
-**`relationships` table** — relationship metadata per object. The `rel_type` column identifies the link type:
-
-| `rel_type`       | API call                  | Applies to          |
-|------------------|---------------------------|---------------------|
-| `attachment`     | `.../Attachments`         | Documents and Parts |
-| `doc_usage_link` | `.../DocUsageLinks`       | Documents           |
-| `described_by`   | `.../DescribedBy`         | Parts               |
-| `part_doc_assoc` | `.../PartDocAssociations` | Parts               |
-
-Each row stores the raw API response in `attributes_json` alongside `source_id` (the object) and `target_id` (the related item's ID).
-
-### How Objects Are Discovered
-
-For each content item found in a folder:
-
-1. **Type known** (`@odata.type` matches an entry in `types.json`) — the full object is fetched from its type-specific endpoint and stored with all attributes.
-2. **Type unknown** — basic metadata from the FolderContent response (ID, Name, LastModified) is stored as a fallback. Add the type to `types.json` to get full attributes on the next sync.
-
-### Note on Subfolder Traversal
-
-The `GET /Containers('{id}')/Folders` endpoint is called once per container. Whether this returns all folders at all depths or only top-level folders depends on the Windchill server. If only top-level folders are returned, add a `--verbose` run to check the `Location` values and confirm all depths are covered.
 
 ---
 

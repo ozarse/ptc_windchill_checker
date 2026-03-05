@@ -166,17 +166,19 @@ def lookup(ctx, number):
 # ---------------------------------------------------------------------------
 
 
-@cli.command()
+@cli.group()
+def sync():
+    """Sync data from Windchill into the local database."""
+
+
+@sync.command("objects")
 @click.option("--types-config", default=str(DEFAULT_TYPES_CONFIG), help="Path to types.json")
-@click.option("--containers-config", default=str(DEFAULT_CONTAINERS_CONFIG),
-              help="Path to containers.json for folder sync.")
 @click.option("--type", "type_names", multiple=True,
               help="Sync only these types (by human name). Repeatable.")
 @click.option("--full", is_flag=True, help="Full sync (ignore last_modified, fetch everything).")
-@click.option("--no-folders", is_flag=True, help="Skip folder sync even if containers.json exists.")
 @click.pass_context
-def sync(ctx, types_config, containers_config, type_names, full, no_folders):
-    """Sync objects from Windchill into local database, then sync folder hierarchy."""
+def sync_objects(ctx, types_config, type_names, full):
+    """Sync object types (documents, parts) from Windchill into the local database."""
     from oneplm_ingestion.api import WindchillClient
     from oneplm_ingestion.db import get_connection, init_db
     from oneplm_ingestion.sync import sync_all
@@ -184,15 +186,40 @@ def sync(ctx, types_config, containers_config, type_names, full, no_folders):
     conn = get_connection(ctx.obj["db_path"])
     init_db(conn)
     client = WindchillClient(dry_run=ctx.obj["dry_run"])
-    containers_path = None if no_folders else Path(containers_config)
     results = sync_all(
         client, conn, Path(types_config),
-        containers_config_path=containers_path,
         types=list(type_names) if type_names else None,
         full=full,
     )
     for type_name, count in results.items():
         click.echo(f"  {type_name}: {count} synced")
+    conn.close()
+
+
+@sync.command("folder")
+@click.option("--containers-config", default=str(DEFAULT_CONTAINERS_CONFIG),
+              help="Path to containers.json")
+@click.pass_context
+def sync_folder(ctx, containers_config):
+    """Sync folder hierarchy from configured Windchill containers.
+
+    Calls /Containers/Folders for each container, then recursively fetches
+    subfolders via /Containers/Folders/{id}/Folders.
+    """
+    from oneplm_ingestion.api import WindchillClient
+    from oneplm_ingestion.db import get_connection, init_db
+    from oneplm_ingestion.folders import sync_folders
+
+    containers_path = Path(containers_config)
+    if not containers_path.exists():
+        raise click.ClickException(f"Containers config not found: {containers_path}")
+
+    conn = get_connection(ctx.obj["db_path"])
+    init_db(conn)
+    client = WindchillClient(dry_run=ctx.obj["dry_run"])
+    results = sync_folders(client, conn, containers_path)
+    for label, count in results.items():
+        click.echo(f"  {label}: {count} folders synced")
     conn.close()
 
 

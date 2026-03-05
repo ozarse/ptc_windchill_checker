@@ -210,6 +210,12 @@ class WindchillClient:
         """List all folders in a container."""
         return self.get_collection(f"{DATAADMIN}/Containers('{container_id}')/Folders")
 
+    def get_subfolders(self, container_id: str, folder_id: str) -> list[dict]:
+        """List direct subfolders of a folder."""
+        return self.get_collection(
+            f"{DATAADMIN}/Containers('{container_id}')/Folders('{folder_id}')/Folders"
+        )
+
     def get_folder_contents(self, container_id: str, folder_id: str) -> list[dict]:
         """List contents (documents/parts) of a folder."""
         return self.get_collection(

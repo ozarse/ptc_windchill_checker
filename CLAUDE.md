@@ -16,7 +16,7 @@ src/oneplm_ingestion/   # All source modules
   auth.py               # Credential storage/retrieval via keyring
   db.py                 # SQLite schema, connection, and CRUD helpers
   sync.py               # Fetches objects by type from API and upserts into DB
-  folders.py            # Folder hierarchy sync and per-item object/relationship fetch
+  folders.py            # Recursive folder hierarchy sync (containers → folders → subfolders)
   relationships.py      # Fetches and stores per-object relationships (attachments, etc.)
   pdf.py                # PDF download and docling text extraction
   checks.py             # Loads checks.json, runs comparisons, saves results
@@ -63,17 +63,18 @@ export ONEPLM_BASE_URL=https://your-host/Windchill/servlet/odata
 
 ```bash
 .venv/Scripts/oneplm --help
-.venv/Scripts/oneplm --dry-run sync    # log API calls without making them
-.venv/Scripts/oneplm -v <command>      # verbose: adds response status, timing, pagination
+.venv/Scripts/oneplm --dry-run sync objects   # log API calls without making them
+.venv/Scripts/oneplm -v <command>             # verbose: adds response status, timing, pagination
 ```
 
 Common workflow:
 ```bash
-oneplm auth login          # store credentials in Windows keyring
-oneplm init                # create DB tables
-oneplm --dry-run sync      # preview the API calls sync would make
-oneplm sync                # fetch all types + walk container folders
-oneplm check               # run all validation rules
+oneplm auth login              # store credentials in Windows keyring
+oneplm init                    # create DB tables
+oneplm --dry-run sync objects  # preview the API calls sync would make
+oneplm sync objects            # fetch all typed objects (documents, parts)
+oneplm sync folder             # walk folder hierarchy recursively
+oneplm check                   # run all validation rules
 oneplm export checks -o results.csv
 ```
 
@@ -123,7 +124,8 @@ Key endpoints:
 - Parts: `v6/ProdMgmt/Parts/PTC.ProdMgmt.ProductDefinitionPart`
 - PDF content: `Documents('{id}')/PrimaryContent` and `/Attachments`
 - Relationships: `Parts('{id}')/DescribedBy`, `Documents('{id}')/DocUsageLinks`, `Parts('{id}')/PartDocAssociations`
-- Folders: `v6/DataAdmin/Containers('{id}')/Folders`
+- Folders (top-level): `v6/DataAdmin/Containers('{id}')/Folders`
+- Subfolders: `v6/DataAdmin/Containers('{id}')/Folders('{fid}')/Folders`
 - Folder contents: `v6/DataAdmin/Containers('{id}')/Folders('{fid}')/FolderContents`
 
 ### Object Types
@@ -134,31 +136,18 @@ Defined in [config/types.json](config/types.json). Each entry has:
 - `api_endpoint` — URL path fragment
 - `classify_attr` / `classify_value` — optional filter to distinguish subtypes (e.g., Config Options PDP vs. Part PDP both use `ProductDefinitionPart` but differ by `ConfigurableModule.Value`)
 
-### Folder & Relationship Sync
+### Folder Sync
 
 Configured via [config/containers.json](config/containers.json) — a list of Windchill container OIDs (e.g. `"OR:wt.inf.library.WTLibrary:10115144708"`) and human labels.
 
-The folder sync runs automatically at the end of `oneplm sync` when `containers.json` exists. The sequence per container:
+Run with `oneplm sync folder`. The sequence per container:
 
-1. `GET /v6/DataAdmin/Containers('{id}')/Folders` — fetches all folders (flat list)
-2. Hierarchy is derived from each folder's `Location` path (e.g. `/Default/SubA/SubB` → `parent_folder_id` points to `/Default/SubA`)
-3. All folders are upserted into the `folders` table
-4. For each folder, `GET .../FolderContents` is called
-5. For each content item:
-   - If not in `objects`: fetch the full object from its type endpoint and store it (uses `@odata.type` to determine the endpoint; falls back to storing basic FolderContent metadata for unknown types)
-   - Set `objects.folder_id` to this folder
-   - Fetch and store relationships (see below)
+1. `GET /v6/DataAdmin/Containers('{id}')/Folders` — fetches top-level folders
+2. For each folder: `GET .../Folders('{fid}')/Folders` — fetches its direct subfolders
+3. Steps 2 recurses until no more subfolders are found
+4. Each folder is upserted into `folders` with `parent_folder_id` set directly from the recursion
 
-**Relationship types** stored per object domain:
-
-| Domain | Relationships fetched |
-|---|---|
-| `v6/DocMgmt` (Documents) | `attachment`, `doc_usage_link` |
-| `v6/ProdMgmt` (Parts) | `attachment`, `described_by`, `part_doc_assoc` |
-
-Each relationship type is refreshed with delete-then-insert per `(source_id, rel_type)`.
-
-Use `--no-folders` to skip folder sync for a run. Use `--containers-config <path>` to point at a different config file.
+Use `--containers-config <path>` to point at a different config file.
 
 ### Validation Checks
 
@@ -174,9 +163,10 @@ All CLI commands are in [cli.py](src/oneplm_ingestion/cli.py). Heavy imports (es
 
 Global options (`--db`, `--data-dir`, `-v`, `--dry-run`) are passed via `click.pass_context` and stored in `ctx.obj`. Commands that construct `WindchillClient` read `ctx.obj["dry_run"]` and forward it.
 
-### Circular Import Avoidance
+`sync` is a Click group with two subcommands:
 
-`sync.py` imports `folders.py` lazily (inside `sync_all`). `folders.py` imports from `sync.py` inside `_sync_folder_contents` (also deferred). This prevents a circular import at module load time while keeping the code organized.
+- `sync objects` — fetches typed objects (documents, parts) via type-specific endpoints
+- `sync folder` — walks the folder hierarchy recursively and upserts folders into the DB
 
 ## Key Conventions
 
