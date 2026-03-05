@@ -110,9 +110,9 @@ def _walk_folder_tree(
 ) -> list[tuple[str, list[str], str | None]]:
     """Recursively walk the $expand=Folders($levels=max) response, upsert each folder.
 
-    Returns a flat list of (folder_id, full_path, location) tuples where:
+    Returns a flat list of (folder_id, full_path, full_location) tuples where:
       - full_path: ordered list of ancestor IDs from cabinet down to this folder (inclusive)
-      - location: the folder's Location string from the API (e.g. "/Default/SubA")
+      - full_location: the folder's own full path (API Location + "/" + Name, e.g. "/Default/01 - Parts")
     """
     if ancestor_path is None:
         ancestor_path = []
@@ -124,7 +124,11 @@ def _walk_folder_tree(
         folder = _make_folder(raw, container_id, parent_folder_id=parent_folder_id, now=now)
         upsert_folder(conn, folder)
         current_path = ancestor_path + [folder_id]
-        entries.append((folder_id, current_path, folder.location))
+        # Build the folder's own full path: Location is the parent path, so append the name
+        parent_loc = folder.location or ""
+        full_location = f"{parent_loc}/{folder.name}" if parent_loc else f"/{folder.name}"
+        entries.append((folder_id, current_path, full_location))
+        log.debug("  folder: %r  full_location: %r", folder.name, full_location)
         children = raw.get("Folders") or []
         if children:
             entries.extend(

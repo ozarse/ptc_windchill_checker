@@ -125,7 +125,7 @@ Key endpoints:
 - PDF content: `Documents('{id}')/PrimaryContent` and `/Attachments`
 - Relationships: `Parts('{id}')/DescribedBy`, `Documents('{id}')/DocUsageLinks`, `Parts('{id}')/PartDocAssociations`
 - Folders (full tree): `v6/DataAdmin/Containers('{id}')/Folders?$expand=Folders($levels=max)`
-- Folder contents: `v6/DataAdmin/Containers('{id}')/Folders('{fid}')/FolderContents`
+- Folder contents: `v6/DataAdmin/Containers('{id}')/Folders('{cabinet}')/Folders('{sub}')/…/FolderContents` — full ancestor chain required
 
 ### Object Types
 
@@ -137,12 +137,18 @@ Defined in [config/types.json](config/types.json). Each entry has:
 
 ### Folder Sync
 
-Configured via [config/containers.json](config/containers.json) — a list of Windchill container OIDs (e.g. `"OR:wt.inf.library.WTLibrary:10115144708"`) and human labels.
+Configured via [config/containers.json](config/containers.json) — a list of Windchill container OIDs (e.g. `"OR:wt.inf.library.WTLibrary:10115144708"`) and human labels. An optional `folder_paths` list restricts which folders have their contents fetched (all folders are still upserted):
+
+```json
+{ "id": "OR:...", "label": "My Library", "folder_paths": ["/Default/01 - Parts"] }
+```
 
 Run with `oneplm sync folder`. The sequence per container:
 
-1. `GET /v6/DataAdmin/Containers('{id}')/Folders?$expand=Folders($levels=max)` — fetches the complete folder tree in a single call
-2. The nested response is walked locally; each folder is upserted with `parent_folder_id` derived from its position in the tree
+1. `GET /v6/DataAdmin/Containers('{id}')/Folders?$expand=Folders($levels=max)` — fetches the complete folder tree in a single call. The nested response is walked locally; each folder is upserted with `parent_folder_id` derived from its position in the tree.
+2. If `folder_paths` is set, filter to folders whose full path (`location + "/" + name`) starts with a configured prefix. Note: the API `Location` field is the **parent** path, not the folder's own full path.
+3. For each matching folder, `GET …/Folders('{cabinet}')/Folders('{sub}')/…/FolderContents` — the full ancestor chain of folder IDs is required in the URL. Each item is fetched in full from its type endpoint and upserted into `objects` with `folder_id` set.
+4. The DB is committed after each folder, so a crash mid-run preserves progress.
 
 Use `--containers-config <path>` to point at a different config file.
 

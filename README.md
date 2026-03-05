@@ -119,21 +119,36 @@ Edit `config/containers.json` with your Windchill container OID(s):
 
 The `id` is the Windchill OID as it appears in URLs. The `label` is only used in log output.
 
+To limit which folders have their contents fetched, add an optional `folder_paths` list. Only folders whose full path starts with one of the listed prefixes (including all subfolders) will be synced:
+
+```json
+[
+  {
+    "id": "OR:wt.inf.library.WTLibrary:10115144708",
+    "label": "My Library",
+    "folder_paths": ["/Default/01 - Parts", "/Default/03 - Documents"]
+  }
+]
+```
+
+All folders are still stored in the `folders` table regardless of this filter — only content fetching is restricted.
+
 ### Traversal Strategy
 
-The folder tree is walked recursively via two API endpoints:
+The full folder tree is retrieved in a single API call using OData expansion:
 
-1. `GET /v6/DataAdmin/Containers('{id}')/Folders` — fetches the top-level folders in the container
-2. `GET /v6/DataAdmin/Containers('{id}')/Folders('{fid}')/Folders` — fetches subfolders of a given folder
+1. `GET /v6/DataAdmin/Containers('{id}')/Folders?$expand=Folders($levels=max)` — returns the complete nested folder tree in one response. The tree is walked locally; each folder is upserted into the `folders` table with `parent_folder_id` set from its position in the tree.
 
-Each folder is upserted into the `folders` table as it is discovered. `parent_folder_id` is set directly from the recursion, so hierarchy is always accurate regardless of how `Location` paths are formatted.
+2. For each folder (subject to `folder_paths` filtering): `GET /v6/DataAdmin/Containers('{id}')/Folders('{cabinet}')/Folders('{sub}')/…/FolderContents` — the **full ancestor chain** of folder IDs must be included in the URL. For each item returned, the full object is fetched from its type-specific endpoint and stored in the `objects` table with `folder_id` set.
+
+Objects are committed to the database after each folder, so a crash mid-run preserves already-completed folders.
 
 ### What Gets Stored
 
 **`folders` table** — each row has:
 
 - `id` — Windchill folder ID
-- `name`, `location` (full path from the API, e.g. `/Default/SubA/SubB`)
+- `name`, `location` — the API `Location` field is the **parent** path (e.g. `/Default`); the folder's own full path is `location + "/" + name` (e.g. `/Default/01 - Parts`)
 - `parent_folder_id` — self-referencing FK set during recursive traversal
 - `container_id` — which container this folder belongs to
 
