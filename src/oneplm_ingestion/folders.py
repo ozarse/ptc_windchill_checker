@@ -67,51 +67,60 @@ def _sync_container(
         log.info("  No folders returned for container '%s'", label)
         return 0, 0
 
-    # Walk the tree, upsert all folders, collect their IDs
-    folder_ids = _walk_folder_tree(conn, container_id, top_level, parent_folder_id=None, now=now)
+    # Walk the tree, upsert all folders, collect (id, full_path) pairs
+    folder_entries = _walk_folder_tree(conn, container_id, top_level, parent_folder_id=None, now=now)
     conn.commit()
-    log.info("  Upserted %d folders for container '%s'", len(folder_ids), label)
+    log.info("  Upserted %d folders for container '%s'", len(folder_entries), label)
 
     # Fetch and store contents of every folder
     total_objects = 0
-    for folder_id in folder_ids:
+    for folder_id, folder_path in folder_entries:
         total_objects += _sync_folder_contents(
-            client, conn, container_id, folder_id, by_windchill_type, now
+            client, conn, container_id, folder_id, folder_path, by_windchill_type, now
         )
     conn.commit()
     log.info(
         "  Stored %d objects across %d folders for container '%s'",
-        total_objects, len(folder_ids), label,
+        total_objects, len(folder_entries), label,
     )
 
-    return len(folder_ids), total_objects
+    return len(folder_entries), total_objects
 
 
 def _walk_folder_tree(
-    conn, container_id: str, folders: list[dict], parent_folder_id: str | None, now: str
-) -> list[str]:
+    conn, container_id: str, folders: list[dict], parent_folder_id: str | None, now: str,
+    ancestor_path: list[str] | None = None,
+) -> list[tuple[str, list[str]]]:
     """Recursively walk the $expand=Folders($levels=max) response, upsert each folder.
 
-    Returns a flat list of all folder IDs encountered (for content fetching).
+    Returns a flat list of (folder_id, full_path) tuples where full_path is the
+    ordered list of ancestor IDs from cabinet down to this folder (inclusive).
     """
-    folder_ids = []
+    if ancestor_path is None:
+        ancestor_path = []
+    entries: list[tuple[str, list[str]]] = []
     for raw in folders:
         folder_id = str(raw.get("ID", ""))
         if not folder_id:
             continue
         folder = _make_folder(raw, container_id, parent_folder_id=parent_folder_id, now=now)
         upsert_folder(conn, folder)
-        folder_ids.append(folder_id)
+        current_path = ancestor_path + [folder_id]
+        entries.append((folder_id, current_path))
         children = raw.get("Folders") or []
         if children:
-            folder_ids.extend(
-                _walk_folder_tree(conn, container_id, children, parent_folder_id=folder_id, now=now)
+            entries.extend(
+                _walk_folder_tree(
+                    conn, container_id, children,
+                    parent_folder_id=folder_id, now=now,
+                    ancestor_path=current_path,
+                )
             )
-    return folder_ids
+    return entries
 
 
 def _sync_folder_contents(
-    client, conn, container_id: str, folder_id: str,
+    client, conn, container_id: str, folder_id: str, folder_path: list[str],
     by_windchill_type: dict[str, list[TypeConfig]], now: str,
 ) -> int:
     """Fetch FolderContents, retrieve each item in full, and store in the objects table.
@@ -121,7 +130,7 @@ def _sync_folder_contents(
     # Deferred to avoid circular import
     from oneplm_ingestion.sync import _classify_object, parse_windchill_object
 
-    contents = client.get_folder_contents(container_id, folder_id)
+    contents = client.get_folder_contents(container_id, folder_path)
     count = 0
 
     for item in contents:

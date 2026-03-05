@@ -213,10 +213,15 @@ class WindchillClient:
             params={"$expand": "Folders($levels=max)"},
         )
 
-    def get_folder_contents(self, container_id: str, folder_id: str) -> list[dict]:
-        """List contents (documents/parts) of a folder."""
+    def get_folder_contents(self, container_id: str, folder_path: list[str]) -> list[dict]:
+        """List contents (documents/parts) of a folder using the full ancestor chain.
+
+        folder_path is the ordered list of folder IDs from cabinet to leaf, e.g.:
+          ["OR:wt.folder.Cabinet:11111", "OR:wt.folder.SubFolder:22222"]
+        """
+        chain = "".join(f"/Folders('{fid}')" for fid in folder_path)
         return self.get_collection(
-            f"{DATAADMIN}/Containers('{container_id}')/Folders('{folder_id}')/FolderContents"
+            f"{DATAADMIN}/Containers('{container_id}'){chain}/FolderContents"
         )
 
     def download_file(self, url: str, dest_path: str) -> str:
