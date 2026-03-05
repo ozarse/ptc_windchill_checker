@@ -199,16 +199,18 @@ def sync_objects(ctx, types_config, type_names, full):
 @sync.command("folder")
 @click.option("--containers-config", default=str(DEFAULT_CONTAINERS_CONFIG),
               help="Path to containers.json")
+@click.option("--types-config", default=str(DEFAULT_TYPES_CONFIG), help="Path to types.json")
 @click.pass_context
-def sync_folder(ctx, containers_config):
-    """Sync folder hierarchy from configured Windchill containers.
+def sync_folder(ctx, containers_config, types_config):
+    """Sync folder hierarchy and all contained parts/documents from Windchill.
 
-    Calls /Containers/Folders for each container, then recursively fetches
-    subfolders via /Containers/Folders/{id}/Folders.
+    Fetches the full folder tree in one call, then retrieves the complete
+    metadata for every part and document found in each folder.
     """
     from oneplm_ingestion.api import WindchillClient
     from oneplm_ingestion.db import get_connection, init_db
     from oneplm_ingestion.folders import sync_folders
+    from oneplm_ingestion.sync import load_type_configs
 
     containers_path = Path(containers_config)
     if not containers_path.exists():
@@ -217,9 +219,10 @@ def sync_folder(ctx, containers_config):
     conn = get_connection(ctx.obj["db_path"])
     init_db(conn)
     client = WindchillClient(dry_run=ctx.obj["dry_run"])
-    results = sync_folders(client, conn, containers_path)
-    for label, count in results.items():
-        click.echo(f"  {label}: {count} folders synced")
+    type_configs = load_type_configs(Path(types_config))
+    results = sync_folders(client, conn, containers_path, type_configs)
+    for label, (folder_count, object_count) in results.items():
+        click.echo(f"  {label}: {folder_count} folders, {object_count} objects synced")
     conn.close()
 
 
