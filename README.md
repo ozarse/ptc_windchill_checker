@@ -5,6 +5,11 @@ CLI tool to ingest PTC Windchill PLM data, compare attributes across object type
 ## Installation
 
 ```bash
+# Create and activate a virtual environment (required on Windows)
+python -m venv .venv
+.venv\Scripts\activate
+
+# Install the package and its dependencies
 pip install -e .
 ```
 
