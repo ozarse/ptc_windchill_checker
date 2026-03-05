@@ -47,9 +47,12 @@ def sync_folders(
     for cfg in containers:
         container_id = cfg["id"]
         label = cfg.get("label", container_id)
+        folder_paths = cfg.get("folder_paths") or None
         log.info("Syncing folders for container '%s' (%s)", label, container_id)
+        if folder_paths:
+            log.info("  Filtering to folder_paths: %s", folder_paths)
         folder_count, object_count = _sync_container(
-            client, conn, container_id, label, by_windchill_type
+            client, conn, container_id, label, by_windchill_type, folder_paths=folder_paths
         )
         results[label] = (folder_count, object_count)
     return results
@@ -58,8 +61,13 @@ def sync_folders(
 def _sync_container(
     client, conn, container_id: str, label: str,
     by_windchill_type: dict[str, list[TypeConfig]],
+    folder_paths: list[str] | None = None,
 ) -> tuple[int, int]:
-    """Fetch the full folder tree and all folder contents for one container."""
+    """Fetch the full folder tree and all folder contents for one container.
+
+    If folder_paths is provided, only folders whose location starts with one of
+    those prefixes will have their contents fetched (all folders are still upserted).
+    """
     now = datetime.now(timezone.utc).isoformat()
 
     top_level = client.get_folders(container_id)
@@ -67,21 +75,30 @@ def _sync_container(
         log.info("  No folders returned for container '%s'", label)
         return 0, 0
 
-    # Walk the tree, upsert all folders, collect (id, full_path) pairs
+    # Walk the tree, upsert all folders, collect (id, full_path, location) tuples
     folder_entries = _walk_folder_tree(conn, container_id, top_level, parent_folder_id=None, now=now)
     conn.commit()
     log.info("  Upserted %d folders for container '%s'", len(folder_entries), label)
 
+    # Apply location-prefix filter if configured
+    content_entries = folder_entries
+    if folder_paths:
+        content_entries = [
+            (fid, fpath, loc) for fid, fpath, loc in folder_entries
+            if loc and any(loc.startswith(fp) for fp in folder_paths)
+        ]
+        log.info("  %d folders match folder_paths filter", len(content_entries))
+
     # Fetch and store contents of every folder, committing after each
     total_objects = 0
-    for folder_id, folder_path in folder_entries:
+    for folder_id, folder_path, _ in content_entries:
         total_objects += _sync_folder_contents(
             client, conn, container_id, folder_id, folder_path, by_windchill_type, now
         )
         conn.commit()
     log.info(
         "  Stored %d objects across %d folders for container '%s'",
-        total_objects, len(folder_entries), label,
+        total_objects, len(content_entries), label,
     )
 
     return len(folder_entries), total_objects
@@ -90,15 +107,16 @@ def _sync_container(
 def _walk_folder_tree(
     conn, container_id: str, folders: list[dict], parent_folder_id: str | None, now: str,
     ancestor_path: list[str] | None = None,
-) -> list[tuple[str, list[str]]]:
+) -> list[tuple[str, list[str], str | None]]:
     """Recursively walk the $expand=Folders($levels=max) response, upsert each folder.
 
-    Returns a flat list of (folder_id, full_path) tuples where full_path is the
-    ordered list of ancestor IDs from cabinet down to this folder (inclusive).
+    Returns a flat list of (folder_id, full_path, location) tuples where:
+      - full_path: ordered list of ancestor IDs from cabinet down to this folder (inclusive)
+      - location: the folder's Location string from the API (e.g. "/Default/SubA")
     """
     if ancestor_path is None:
         ancestor_path = []
-    entries: list[tuple[str, list[str]]] = []
+    entries: list[tuple[str, list[str], str | None]] = []
     for raw in folders:
         folder_id = str(raw.get("ID", ""))
         if not folder_id:
@@ -106,7 +124,7 @@ def _walk_folder_tree(
         folder = _make_folder(raw, container_id, parent_folder_id=parent_folder_id, now=now)
         upsert_folder(conn, folder)
         current_path = ancestor_path + [folder_id]
-        entries.append((folder_id, current_path))
+        entries.append((folder_id, current_path, folder.location))
         children = raw.get("Folders") or []
         if children:
             entries.extend(

@@ -1,6 +1,10 @@
 [
   {
     "id": "OR:wt.inf.library.WTLibrary:10115144708",
-    "label": "My Library"
+    "label": "My Library",
+    "folder_paths": [
+      "/Default/01 - Parts",
+      "/Default/03 - Documents"
+    ],
   }
 ]
