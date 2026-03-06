@@ -196,6 +196,56 @@ def sync_objects(ctx, types_config, type_names, full):
     conn.close()
 
 
+@sync.command("relationships")
+@click.option("--type", "type_names", multiple=True,
+              help="Sync only objects of these types (by human name). Repeatable.")
+@click.pass_context
+def sync_relationships(ctx, type_names):
+    """Fetch and store relationships for objects already in the local database.
+
+    Iterates over objects in the DB and calls the Windchill relationship
+    endpoints (DescribedBy, DocUsageLinks, attachments, PartDocAssociations)
+    for each, storing results in the relationships table.
+    """
+    from datetime import datetime, timezone
+
+    from oneplm_ingestion.api import WindchillClient
+    from oneplm_ingestion.db import get_all_objects, get_connection, get_objects_by_type, init_db
+    from oneplm_ingestion.relationships import (
+        collection_for_type,
+        domain_for_type,
+        fetch_and_store_relationships,
+    )
+
+    conn = get_connection(ctx.obj["db_path"])
+    init_db(conn)
+    client = WindchillClient(dry_run=ctx.obj["dry_run"])
+    now = datetime.now(timezone.utc).isoformat()
+
+    if type_names:
+        objects = []
+        for tn in type_names:
+            objects.extend(get_objects_by_type(conn, tn))
+    else:
+        objects = get_all_objects(conn)
+
+    click.echo(f"Fetching relationships for {len(objects)} objects...")
+    total_rels = 0
+    skipped = 0
+    for obj in objects:
+        domain = domain_for_type(obj.windchill_type)
+        collection = collection_for_type(obj.windchill_type)
+        if not domain or not collection:
+            skipped += 1
+            continue
+        count = fetch_and_store_relationships(client, conn, obj.id, domain, collection, now)
+        total_rels += count
+
+    conn.commit()
+    click.echo(f"Done. {total_rels} relationship records stored ({skipped} objects skipped — unknown type).")
+    conn.close()
+
+
 @sync.command("folder")
 @click.option("--containers-config", default=str(DEFAULT_CONTAINERS_CONFIG),
               help="Path to containers.json")
