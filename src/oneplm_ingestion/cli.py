@@ -199,18 +199,20 @@ def sync_objects(ctx, types_config, type_names, full):
 @sync.command("relationships")
 @click.option("--type", "type_names", multiple=True,
               help="Sync only objects of these types (by human name). Repeatable.")
+@click.option("--skip-existing", is_flag=True,
+              help="Skip objects that already have any relationships stored in the DB.")
 @click.pass_context
-def sync_relationships(ctx, type_names):
+def sync_relationships(ctx, type_names, skip_existing):
     """Fetch and store relationships for objects already in the local database.
 
     Iterates over objects in the DB and calls the Windchill relationship
-    endpoints (DescribedBy, DocUsageLinks, attachments, PartDocAssociations)
+    endpoints (DescribedBy, DocUsageLinks, attachments, PartDocAssociations, Uses)
     for each, storing results in the relationships table.
     """
     from datetime import datetime, timezone
 
     from oneplm_ingestion.api import WindchillClient
-    from oneplm_ingestion.db import get_all_objects, get_connection, get_objects_by_type, init_db
+    from oneplm_ingestion.db import get_all_objects, get_connection, get_objects_by_type, get_relationships_for_object, init_db
     from oneplm_ingestion.relationships import (
         collection_for_type,
         domain_for_type,
@@ -231,18 +233,27 @@ def sync_relationships(ctx, type_names):
 
     click.echo(f"Fetching relationships for {len(objects)} objects...")
     total_rels = 0
-    skipped = 0
+    skipped_type = 0
+    skipped_existing = 0
     for obj in objects:
         domain = domain_for_type(obj.windchill_type)
         collection = collection_for_type(obj.windchill_type)
         if not domain or not collection:
-            skipped += 1
+            skipped_type += 1
+            continue
+        if skip_existing and get_relationships_for_object(conn, obj.id):
+            skipped_existing += 1
             continue
         count = fetch_and_store_relationships(client, conn, obj.id, domain, collection, now)
         total_rels += count
 
     conn.commit()
-    click.echo(f"Done. {total_rels} relationship records stored ({skipped} objects skipped — unknown type).")
+    parts = [f"{total_rels} relationship records stored"]
+    if skipped_existing:
+        parts.append(f"{skipped_existing} skipped (already in DB)")
+    if skipped_type:
+        parts.append(f"{skipped_type} skipped (unknown type)")
+    click.echo("Done. " + ", ".join(parts) + ".")
     conn.close()
 
 
@@ -290,22 +301,34 @@ def pdf():
 @click.option("--type", "type_name", help="Download PDFs for all objects of this type.")
 @click.option("--object-id", help="Download PDFs for a specific object ID.")
 @click.option("--types-config", default=str(DEFAULT_TYPES_CONFIG), help="Path to types.json")
+@click.option("--metadata-only", is_flag=True,
+              help="Store content URL and filename in the DB without downloading the file.")
 @click.pass_context
-def pdf_download(ctx, type_name, object_id, types_config):
-    """Download PDFs from Windchill for local objects."""
+def pdf_download(ctx, type_name, object_id, types_config, metadata_only):
+    """Fetch PDF content from Windchill for local objects.
+
+    By default, downloads the actual files to disk. Use --metadata-only to
+    store only the filename and download URL in the database without downloading.
+    """
     from oneplm_ingestion.api import WindchillClient
     from oneplm_ingestion.db import get_connection, get_objects_by_type
-    from oneplm_ingestion.pdf import download_pdfs_for_object
+    from oneplm_ingestion.pdf import download_pdfs_for_object, fetch_pdf_metadata_for_object
     from oneplm_ingestion.sync import load_type_configs
 
     conn = get_connection(ctx.obj["db_path"])
     client = WindchillClient(dry_run=ctx.obj["dry_run"])
 
+    def _process(obj_id, domain="v6/DocMgmt", collection="Documents"):
+        if metadata_only:
+            return fetch_pdf_metadata_for_object(client, conn, obj_id, domain=domain, collection=collection)
+        return download_pdfs_for_object(client, conn, obj_id, ctx.obj["data_dir"], domain=domain, collection=collection)
+
+    verb = "Fetched metadata" if metadata_only else "Downloaded"
+
     if object_id:
-        pdfs = download_pdfs_for_object(client, conn, object_id, ctx.obj["data_dir"])
-        click.echo(f"Downloaded {len(pdfs)} PDF(s) for {object_id}")
+        pdfs = _process(object_id)
+        click.echo(f"{verb} {len(pdfs)} PDF(s) for {object_id}")
     elif type_name:
-        # Look up domain/collection from types config
         type_configs = load_type_configs(Path(types_config))
         tc = next((t for t in type_configs if t.human_name == type_name), None)
         domain = tc.domain if tc else "v6/DocMgmt"
@@ -314,13 +337,10 @@ def pdf_download(ctx, type_name, object_id, types_config):
         objects = get_objects_by_type(conn, type_name)
         total = 0
         for obj in objects:
-            click.echo(f"  Downloading PDFs for {obj.number or obj.id}...")
-            pdfs = download_pdfs_for_object(
-                client, conn, obj.id, ctx.obj["data_dir"],
-                domain=domain, collection=collection,
-            )
+            click.echo(f"  Processing {obj.number or obj.id}...")
+            pdfs = _process(obj.id, domain=domain, collection=collection)
             total += len(pdfs)
-        click.echo(f"Downloaded {total} PDF(s) for {len(objects)} objects")
+        click.echo(f"{verb} {total} PDF(s) for {len(objects)} objects")
     else:
         raise click.UsageError("Provide --type or --object-id")
     conn.close()

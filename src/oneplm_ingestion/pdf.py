@@ -20,6 +20,30 @@ def ensure_pdf_dir(data_dir: Path) -> Path:
     return pdf_dir
 
 
+def fetch_pdf_metadata_for_object(
+    client: WindchillClient,
+    conn,
+    object_id: str,
+    domain: str = "v6/DocMgmt",
+    collection: str = "Documents",
+) -> list[PDFContent]:
+    """Fetch PDF content URLs and store metadata in DB without downloading files."""
+    pdf_infos = client.get_pdf_content_urls(object_id, domain=domain, collection=collection)
+
+    results = []
+    for info in pdf_infos:
+        pdf = PDFContent(
+            object_id=object_id,
+            content_role=info.get("role", "primary"),
+            filename=info["filename"],
+            download_url=info["url"],
+        )
+        pdf.id = upsert_pdf(conn, pdf)
+        results.append(pdf)
+    conn.commit()
+    return results
+
+
 def download_pdfs_for_object(
     client: WindchillClient,
     conn,

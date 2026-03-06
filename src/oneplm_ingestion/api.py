@@ -147,6 +147,10 @@ class WindchillClient:
         """Get PartDocAssociation links for a part."""
         return self.get_collection(f"{PRODMGMT}/Parts('{part_id}')/PartDocAssociations")
 
+    def get_part_uses(self, part_id: str) -> list[dict]:
+        """Get PartUse links — child parts used by this part (BOM/assembly structure)."""
+        return self.get_collection(f"{PRODMGMT}/Parts('{part_id}')/Uses")
+
     # ------------------------------------------------------------------
     # Content / PDF
     # ------------------------------------------------------------------

@@ -18,7 +18,7 @@ log = logging.getLogger(__name__)
 # Domain → relationship types to fetch for that domain
 _REL_TYPES: dict[str, list[str]] = {
     "v6/DocMgmt": ["attachment", "doc_usage_link"],
-    "v6/ProdMgmt": ["attachment", "described_by", "part_doc_assoc"],
+    "v6/ProdMgmt": ["attachment", "described_by", "part_doc_assoc", "uses"],
 }
 
 
@@ -52,6 +52,8 @@ def _fetch(
             return client.get_part_described_by(object_id)
         if rel_type == "part_doc_assoc":
             return client.get_part_doc_associations(object_id)
+        if rel_type == "uses":
+            return client.get_part_uses(object_id)
         log.warning("Unknown relationship type: %s", rel_type)
         return []
     except Exception as exc:
