@@ -378,6 +378,34 @@ def pdf_extract(ctx, object_id, extract_all):
     conn.close()
 
 
+@pdf.command("check")
+@click.pass_context
+def pdf_check(ctx):
+    """Check IFU Drawing PDF filenames against object metadata.
+
+    Parses the primary content filename for each IFU Drawing in the database
+    and validates:
+      - Number match (drawing number without language suffix == filename number)
+      - Revision match (drawing revision == filename revision)
+      - Language code is a valid ISO 639-1 two-letter code
+      - Language code matches the suffix in the drawing number (e.g. -EN)
+
+    Results are stored in the check_results table under the check name
+    "Content Change Required". Run 'pdf download --metadata-only' first
+    to populate PDF metadata without downloading files.
+    """
+    from oneplm_ingestion.content_checks import run_and_save
+    from oneplm_ingestion.db import get_connection
+
+    conn = get_connection(ctx.obj["db_path"])
+    results = run_and_save(conn)
+    passed = sum(1 for r in results if r.passed)
+    failed = sum(1 for r in results if not r.passed)
+    icon = "PASS" if failed == 0 else "FAIL"
+    click.echo(f"  [{icon}] Content Change Required: {passed} passed, {failed} failed")
+    conn.close()
+
+
 # ---------------------------------------------------------------------------
 # check
 # ---------------------------------------------------------------------------
