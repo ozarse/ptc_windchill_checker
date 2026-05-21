@@ -67,8 +67,11 @@ class WindchillClient:
         resp = self.session.get(url, params=params, timeout=self.timeout)
         elapsed = time.monotonic() - t0
         log.debug("  -> %s in %.2fs", resp.status_code, elapsed)
+        log.debug("  -> final url: %s", resp.url)
         resp.raise_for_status()
-        return resp.json()
+        data = resp.json()
+        log.debug("  -> response keys: %s", list(data.keys()) if isinstance(data, dict) else type(data).__name__)
+        return data
 
     def get_collection(self, endpoint: str, params: dict | None = None) -> list[dict]:
         """GET a paginated OData collection, follow @odata.nextLink, return all items."""
