@@ -15,10 +15,18 @@ from oneplm_ingestion.db import save_relationships
 
 log = logging.getLogger(__name__)
 
-# Domain → relationship types to fetch for that domain
+# Domain → relationship types to fetch for that domain.
+#
+# described_by / uses / used_by are *resolved* relationships: each stored row's
+# target_id and target_number are the related object's real ID/Number (the second
+# navigation hop has already been followed), so checks can join records offline.
+#   IFU PDP  --described_by--> IFU Drawing (document)
+#   IFU PDP  --used_by-------> Config PDP  (parent part)
+#   Config PDP --uses--------> IFU PDP     (child part)
+# attachment / doc_usage_link / part_doc_assoc remain raw link rows.
 _REL_TYPES: dict[str, list[str]] = {
     "v6/DocMgmt": ["attachment", "doc_usage_link"],
-    "v6/ProdMgmt": ["attachment", "described_by", "part_doc_assoc", "uses"],
+    "v6/ProdMgmt": ["attachment", "described_by", "part_doc_assoc", "uses", "used_by"],
 }
 
 
@@ -42,23 +50,57 @@ def fetch_and_store_relationships(
 def _fetch(
     client, object_id: str, domain: str, collection: str, rel_type: str
 ) -> list[dict]:
-    """Call the appropriate API method for a single relationship type."""
+    """Call the appropriate API method for a single relationship type.
+
+    For described_by / uses the first-hop link is followed to the related object
+    so the returned dicts carry the real related object's ID and Number.
+    """
     try:
         if rel_type == "attachment":
             return client.get_attachments(domain, collection, object_id)
         if rel_type == "doc_usage_link":
             return client.get_doc_usage_links(object_id)
-        if rel_type == "described_by":
-            return client.get_part_described_by(object_id)
         if rel_type == "part_doc_assoc":
             return client.get_part_doc_associations(object_id)
+        if rel_type == "described_by":
+            return _resolve_described_by(client, object_id)
         if rel_type == "uses":
-            return client.get_part_uses(object_id)
+            return _resolve_uses(client, object_id)
+        if rel_type == "used_by":
+            return client.get_part_used_by(object_id)
         log.warning("Unknown relationship type: %s", rel_type)
         return []
     except Exception as exc:
         log.warning("  Failed to fetch %s for object %s: %s", rel_type, object_id, exc)
         return []
+
+
+def _resolve_described_by(client, part_id: str) -> list[dict]:
+    """Follow each PartDescribeLink to the document that describes the part."""
+    documents = []
+    for link in client.get_part_described_by(part_id):
+        link_id = link.get("ID")
+        if not link_id:
+            continue
+        try:
+            documents.append(client.get_described_by_document(part_id, link_id))
+        except Exception as exc:
+            log.warning("  Failed to follow described_by link %s on %s: %s", link_id, part_id, exc)
+    return documents
+
+
+def _resolve_uses(client, part_id: str) -> list[dict]:
+    """Follow each PartUse link to the child part it uses."""
+    parts = []
+    for link in client.get_part_uses(part_id):
+        use_id = link.get("ID")
+        if not use_id:
+            continue
+        try:
+            parts.append(client.get_uses_part(part_id, use_id))
+        except Exception as exc:
+            log.warning("  Failed to follow uses link %s on %s: %s", use_id, part_id, exc)
+    return parts
 
 
 def domain_for_type(windchill_type: str) -> str | None:

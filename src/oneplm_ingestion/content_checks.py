@@ -18,6 +18,7 @@ from datetime import datetime, timezone
 
 from oneplm_ingestion.db import get_objects_by_type, get_pdfs_for_object, save_check_results
 from oneplm_ingestion.models import CheckResult
+from oneplm_ingestion.registry import register_check
 
 log = logging.getLogger(__name__)
 
@@ -106,6 +107,7 @@ def _extract_language_suffix(number: str) -> str | None:
     return m.group(2).upper() if m else None
 
 
+@register_check("ifu_drawing_pdf_filename")
 def run_pdf_filename_checks(conn) -> list[CheckResult]:
     """Check IFU Drawing primary-content filenames against object metadata.
 
@@ -120,7 +122,7 @@ def run_pdf_filename_checks(conn) -> list[CheckResult]:
     now = datetime.now(timezone.utc).isoformat()
     results: list[CheckResult] = []
 
-    ifu_drawings = get_objects_by_type(conn, "IFU Document")
+    ifu_drawings = get_objects_by_type(conn, "IFU Drawing")
     log.info("Running PDF filename checks for %d IFU Drawings", len(ifu_drawings))
 
     for drawing in ifu_drawings:

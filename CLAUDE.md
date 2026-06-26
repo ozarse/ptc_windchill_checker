@@ -133,7 +133,15 @@ Defined in [config/types.json](config/types.json). Each entry has:
 - `human_name` — used in CLI flags and DB `type_name` column
 - `windchill_type` — OData type string
 - `api_endpoint` — URL path fragment
-- `classify_attr` / `classify_value` — optional filter to distinguish subtypes (e.g., Config Options PDP vs. Part PDP both use `ProductDefinitionPart` but differ by `ConfigurableModule.Value`)
+- `classify_attr` / `classify_value` — optional filter to distinguish subtypes (e.g., Config PDP vs. IFU PDP both use `ProductDefinitionPart` but differ by `ConfigurableModule.Value`; IFU Drawing additionally requires `DocTypeName == "IFU Drawing"`)
+
+The three logical record types validated by checks are:
+
+| Logical type | Windchill identity |
+|---|---|
+| `Config PDP` | `ProductDefinitionPart`, `ConfigurableModule.Value == "Yes"` |
+| `IFU PDP` | `ProductDefinitionPart`, `ConfigurableModule.Value == "No"` |
+| `IFU Drawing` | `PTC.DocMgmt.IFUDrawing` document, `DocTypeName == "IFU Drawing"` |
 
 ### Folder Sync
 
@@ -154,11 +162,15 @@ Use `--containers-config <path>` to point at a different config file.
 
 ### Validation Checks
 
-Rules are defined in [config/checks.json](config/checks.json) and executed by [checks.py](src/oneplm_ingestion/checks.py).
+Checks are defined declaratively in [config/checks.json](config/checks.json) and executed by [checks.py](src/oneplm_ingestion/checks.py). Each entry has a `kind`:
 
-Each rule pairs objects of a `source_type` and `target_type` by a `match_on` attribute (usually `Number`), then runs one or more comparisons. Supported operators: `equals`, `not_equals`, `contains`, `not_contains`, `not_empty`, `is_empty`, `matches` (regex), `greater_than`, `less_than`, `greater_equal`, `less_equal`, `before`, `after`.
+- **`attribute`** — validates attributes of individual records of one `type`. Carries a list of `assertions`, each an `attr` + `operator` (+ optional `value`, + optional `when`).
+- **`relationship`** — validates a record against the records reached through a Windchill relationship. Names a source `type`, a `related_type`, and a `via` (one of `describes`, `described_by`, `uses`, `used_by`), then runs `comparisons` between source and related attributes. `on_missing` (`fail` | `skip`) controls behaviour when no related record exists.
+- **`python`** — delegates to a function registered in [registry.py](src/oneplm_ingestion/registry.py) via `@register_check("<name>")`, referenced by `function`. The escape hatch for logic that does not fit the declarative forms.
 
-Comparisons support an optional `when` precondition evaluated against the source object.
+The shared operator set lives in [operators.py](src/oneplm_ingestion/operators.py): `equals`, `not_equals`, `contains`, `not_contains`, `not_empty`, `is_empty`, `matches` (regex), `greater_than`, `less_than`, `greater_equal`, `less_equal`, `before`, `after`. Assertions and comparisons both support an optional `when` precondition evaluated against the source record.
+
+Relationship checks join records **offline** from the `relationships` table. `sync relationships` resolves `described_by` / `uses` through their second navigation hop and `used_by` directly, storing each related object's real `target_id` and `target_number` — so a check like "IFU Drawing and IFU PDP share the same Number" pairs records by the actual link, not by matching Number. The `describes` direction is the stored `described_by` traversed in inverse. Re-run `sync relationships` after schema changes to populate these.
 
 ### CLI Design
 

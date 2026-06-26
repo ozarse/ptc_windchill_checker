@@ -92,7 +92,7 @@ def sync_endpoint(
     """Sync a single API endpoint, distributing objects across type configs by classification.
 
     This avoids duplicate API calls when multiple types share the same endpoint
-    (e.g., Config Options PDP and Part PDP are both ProductDefinitionPart).
+    (e.g., Config PDP and IFU PDP are both ProductDefinitionPart).
     """
     # Use the earliest last_sync across all types sharing this endpoint
     last_sync = None

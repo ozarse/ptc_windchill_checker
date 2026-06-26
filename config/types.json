@@ -1,6 +1,6 @@
 [
   {
-    "human_name": "Config Options PDP",
+    "human_name": "Config PDP",
     "windchill_type": "PTC.ProdMgmt.ProductDefinitionPart",
     "api_endpoint": "v6/ProdMgmt/Parts/PTC.ProdMgmt.ProductDefinitionPart",
     "domain": "v6/ProdMgmt",
@@ -10,7 +10,7 @@
     "attributes": []
   },
   {
-    "human_name": "Part PDP",
+    "human_name": "IFU PDP",
     "windchill_type": "PTC.ProdMgmt.ProductDefinitionPart",
     "api_endpoint": "v6/ProdMgmt/Parts/PTC.ProdMgmt.ProductDefinitionPart",
     "domain": "v6/ProdMgmt",
@@ -20,11 +20,13 @@
     "attributes": []
   },
   {
-    "human_name": "IFU Document",
+    "human_name": "IFU Drawing",
     "windchill_type": "PTC.DocMgmt.IFUDrawing",
     "api_endpoint": "v6/DocMgmt/Documents/PTC.DocMgmt.IFUDrawing",
     "domain": "v6/DocMgmt",
     "collection": "Documents",
+    "classify_attr": "DocTypeName",
+    "classify_value": "IFU Drawing",
     "attributes": []
   },
   {

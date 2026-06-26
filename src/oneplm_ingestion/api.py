@@ -154,6 +154,14 @@ class WindchillClient:
         """Get PartUse links — child parts used by this part (BOM/assembly structure)."""
         return self.get_collection(f"{PRODMGMT}/Parts('{part_id}')/Uses")
 
+    def get_uses_part(self, part_id: str, part_use_id: str) -> dict:
+        """Follow a PartUse link to the child part it uses."""
+        return self.get(f"{PRODMGMT}/Parts('{part_id}')/Uses('{part_use_id}')/Uses")
+
+    def get_part_used_by(self, part_id: str) -> list[dict]:
+        """Get parent parts that use this part — returns Part entities directly."""
+        return self.get_collection(f"{PRODMGMT}/Parts('{part_id}')/UsedBy")
+
     # ------------------------------------------------------------------
     # Content / PDF
     # ------------------------------------------------------------------

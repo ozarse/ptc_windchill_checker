@@ -10,7 +10,7 @@ class WindchillObject:
     """A single object fetched from Windchill."""
 
     id: str
-    type_name: str  # Human name: "Config Options PDP", "Part PDP", etc.
+    type_name: str  # Human name: "Config PDP", "IFU PDP", "IFU Drawing", etc.
     windchill_type: str  # Windchill internal type ID
     number: str | None
     name: str | None
@@ -92,23 +92,61 @@ class WhenCondition:
 
 
 @dataclass
-class Comparison:
-    """A single attribute comparison within a check rule."""
+class Assertion:
+    """A single-record attribute assertion within an attribute check."""
 
-    source_attr: str
-    operator: str = "equals"
-    target_attr: str | None = None
+    attr: str
+    operator: str = "not_empty"
     value: str | None = None
     when: WhenCondition | None = None
 
 
 @dataclass
-class CheckConfig:
-    """Definition of an attribute comparison rule."""
+class RelationshipComparison:
+    """Compares a source record's attribute against a related record's attribute."""
+
+    source_attr: str
+    target_attr: str | None = None
+    operator: str = "equals"
+    value: str | None = None
+    when: WhenCondition | None = None
+
+
+@dataclass
+class AttributeCheck:
+    """Validates attributes of individual records of a single type."""
 
     name: str
-    description: str
-    source_type: str  # Human type name of source object
-    target_type: str  # Human type name of target object
-    match_on: str  # Attribute used to pair source <-> target objects
-    comparisons: list[Comparison] = field(default_factory=list)
+    type: str  # Logical type name, e.g. "Config PDP"
+    description: str = ""
+    assertions: list[Assertion] = field(default_factory=list)
+    kind: str = "attribute"
+
+
+@dataclass
+class RelationshipCheck:
+    """Validates a record against records reached through a relationship.
+
+    ``via`` names the relationship traversed from the source ``type`` to the
+    ``related_type`` (one of: describes, described_by, uses, used_by).
+    ``on_missing`` is "fail" or "skip" when no related record is found.
+    """
+
+    name: str
+    type: str
+    related_type: str
+    via: str
+    description: str = ""
+    comparisons: list[RelationshipComparison] = field(default_factory=list)
+    on_missing: str = "fail"
+    kind: str = "relationship"
+
+
+@dataclass
+class PythonCheck:
+    """Delegates to a registered Python function for complex one-off logic."""
+
+    name: str
+    function: str  # Key in checks.registry.CHECK_REGISTRY
+    description: str = ""
+    kind: str = "python"
