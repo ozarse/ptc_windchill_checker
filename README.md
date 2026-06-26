@@ -89,7 +89,7 @@ oneplm -v sync objects
 ```bash
 # Object sync
 oneplm sync objects                            # sync all typed objects
-oneplm sync objects --type "IFU Document"      # sync only one object type
+oneplm sync objects --type "IFU Drawing"       # sync only one object type
 oneplm sync objects --full                     # ignore last_modified, re-fetch everything
 oneplm sync objects --types-config path/to/types.json
 
@@ -156,58 +156,109 @@ Objects are committed to the database after each folder, so a crash mid-run pres
 
 ## Attribute Validation Checks
 
-The check system lets you define rules that validate attributes on Windchill objects. Rules are defined in `config/checks.json` and executed with `oneplm check`.
+The check system validates the records ingested from Windchill. Checks are defined in `config/checks.json` and executed with `oneplm check`. Results (pass/fail/skip) are saved to the database and can be exported to CSV.
 
-### How It Works
+### Check Kinds
 
-1. Each rule specifies a **source type** and a **target type** (can be the same type).
-2. Objects are **paired** by a shared attribute (the `match_on` field -- usually `Number`).
-3. For each pair, one or more **comparisons** are run against their attributes.
-4. Results (pass/fail/skip) are saved to the database and can be exported to CSV.
+Every entry in `checks.json` has a `kind`. There are three:
 
-### Rule Structure
+| Kind | Validates | Add your own by |
+|---|---|---|
+| `attribute` | Attributes of individual records of one type | Editing JSON |
+| `relationship` | A record against records reached through a Windchill relationship | Editing JSON |
+| `python` | Anything — delegates to a registered Python function | Writing a function + JSON entry |
 
-Every rule in `checks.json` follows this structure:
+All three share the same operator set (see [Operators](#operators)) and the optional `when` precondition.
+
+### `attribute` checks
+
+Validate each record of one `type` against a list of `assertions`:
 
 ```json
 {
-  "name": "unique_rule_name",
-  "description": "Human-readable explanation of what this rule checks",
-  "source_type": "Part PDP",
-  "target_type": "IFU Document",
-  "match_on": "Number",
-  "comparisons": [
+  "name": "config_pdp_attributes",
+  "kind": "attribute",
+  "type": "Config PDP",
+  "description": "Config PDP records must carry the core required attributes.",
+  "assertions": [
+    { "attr": "Number", "operator": "not_empty" },
     {
-      "source_attr": "RegulatoryClass",
-      "target_attr": "RegulatoryClass",
-      "operator": "equals"
+      "attr": "ApprovalDate",
+      "operator": "not_empty",
+      "when": { "attr": "State.Value", "operator": "equals", "value": "Released" }
     }
   ]
 }
 ```
 
-**Fields:**
+| Field | Required | Description |
+|---|---|---|
+| `type` | Yes | Logical record type. Must match a `human_name` in `config/types.json` (e.g. `Config PDP`, `IFU PDP`, `IFU Drawing`). |
+| `assertions` | Yes | List of `{ attr, operator, value?, when? }`. `attr` supports dot notation (`State.Value`). |
+
+### `relationship` checks
+
+Validate a record against the records reached through a Windchill relationship. The relationship is resolved **offline** from the local `relationships` table (run `oneplm sync relationships` first):
+
+```json
+{
+  "name": "ifu_drawing_matches_ifu_pdp",
+  "kind": "relationship",
+  "type": "IFU Drawing",
+  "related_type": "IFU PDP",
+  "via": "describes",
+  "on_missing": "fail",
+  "comparisons": [
+    { "source_attr": "Name", "target_attr": "Name", "operator": "equals" },
+    { "source_attr": "Number", "target_attr": "Number", "operator": "equals" }
+  ]
+}
+```
 
 | Field | Required | Description |
-|-------|----------|-------------|
-| `name` | Yes | Unique identifier for the rule. Used in CLI output and exports. |
-| `description` | Yes | Human-readable description of the rule's purpose. |
-| `source_type` | Yes | The type of object to check. Must match a `human_name` in `config/types.json`. |
-| `target_type` | Yes | The type to compare against. Can be the same as `source_type` for self-checks. |
-| `match_on` | Yes | The attribute used to pair source and target objects (e.g., `Number`). |
-| `comparisons` | Yes | A list of one or more comparisons to run on each paired object. |
+|---|---|---|
+| `type` | Yes | The source record type. |
+| `related_type` | Yes | The type of the related records to compare against. |
+| `via` | Yes | Relationship to traverse from the source: `describes`, `described_by`, `uses`, or `used_by`. |
+| `on_missing` | No | `fail` (default) records a failure when no related record exists; `skip` ignores it. |
+| `comparisons` | Yes | List of `{ source_attr, target_attr, operator, value?, when? }`. |
+
+The relationship directions for the three record types:
+
+- IFU Drawing `describes` → IFU PDP &nbsp;&nbsp;(and IFU PDP `described_by` → IFU Drawing)
+- IFU PDP `used_by` → Config PDP &nbsp;&nbsp;(and Config PDP `uses` → IFU PDPs)
+
+Records are paired by the actual Windchill link, **not** by matching Number — so comparing `Number` for equality is meaningful.
+
+### `python` checks
+
+For logic that does not fit the declarative forms, register a function and reference it by name:
+
+```python
+# in any module imported by registry.py's load_builtin_checks
+from oneplm_ingestion.registry import register_check
+from oneplm_ingestion.models import CheckResult
+
+@register_check("my_custom_check")
+def my_custom_check(conn) -> list[CheckResult]:
+    ...  # query the DB, return CheckResult rows
+```
+
+```json
+{ "name": "My Custom Check", "kind": "python", "function": "my_custom_check" }
+```
 
 ### Comparison Fields
 
-Each entry in `comparisons` has:
+Each entry in an `attribute` check's `assertions` or a `relationship` check's `comparisons` has:
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `source_attr` | Yes | The attribute to read from the source object. Supports dot notation (e.g., `State.Value`). |
+| `attr` / `source_attr` | Yes | Attribute to read from the (source) record. Supports dot notation (e.g., `State.Value`). |
 | `operator` | Yes | The comparison operator. See the operator table below. |
-| `target_attr` | No | The attribute to read from the target object. Required for cross-object comparisons like `equals`. |
+| `target_attr` | No | (relationship only) Attribute to read from the related record. Required for cross-record comparisons like `equals`. |
 | `value` | No | A literal value to compare against. Required for `matches`, numeric, and date operators. When both `target_attr` and `value` are present, `value` takes precedence. |
-| `when` | No | A precondition. If specified, the comparison is only run when the condition is met. If the condition is not met, the comparison is skipped (counts as pass). |
+| `when` | No | A precondition evaluated against the source record. If not met, the comparison is skipped (counts as pass). |
 
 ### Operators
 
@@ -289,108 +340,72 @@ Types are defined in `config/types.json`. The default types are:
 
 | Type Name | Windchill Type |
 |-----------|---------------|
-| Config Options PDP | `PTC.ProdMgmt.ProductDefinitionPart` (ConfigurableModule = Yes) |
-| Part PDP | `PTC.ProdMgmt.ProductDefinitionPart` (ConfigurableModule = No) |
-| IFU Document | `PTC.DocMgmt.IFUDrawing` |
+| Config PDP | `PTC.ProdMgmt.ProductDefinitionPart` (ConfigurableModule = Yes) |
+| IFU PDP | `PTC.ProdMgmt.ProductDefinitionPart` (ConfigurableModule = No) |
+| IFU Drawing | `PTC.DocMgmt.IFUDrawing` (DocTypeName = "IFU Drawing") |
 | Product Design | `PTC.DocMgmt.ProductDesign` |
 
 ### Examples
 
-**Cross-type equality** -- Part PDP and IFU Document must share the same RegulatoryClass:
+**Relationship equality** — an IFU Drawing and the IFU PDP it describes must share Name and Number:
 
 ```json
 {
-  "name": "pdp_ifu_regulatory_class_match",
-  "description": "Part PDP and IFU Document must have the same RegulatoryClass",
-  "source_type": "Part PDP",
-  "target_type": "IFU Document",
-  "match_on": "Number",
+  "name": "ifu_drawing_matches_ifu_pdp",
+  "kind": "relationship",
+  "type": "IFU Drawing",
+  "related_type": "IFU PDP",
+  "via": "describes",
+  "on_missing": "fail",
   "comparisons": [
-    {
-      "source_attr": "RegulatoryClass",
-      "target_attr": "RegulatoryClass",
-      "operator": "equals"
-    }
+    { "source_attr": "Name", "target_attr": "Name", "operator": "equals" },
+    { "source_attr": "Number", "target_attr": "Number", "operator": "equals" }
   ]
 }
 ```
 
-**Conditional presence** -- Released parts must have an ApprovalDate:
+**Conditional presence** — Released Config PDPs must have an ApprovalDate:
 
 ```json
 {
-  "name": "released_parts_need_approval_date",
-  "description": "When a Part PDP is Released, its ApprovalDate must not be empty",
-  "source_type": "Part PDP",
-  "target_type": "Part PDP",
-  "match_on": "Number",
-  "comparisons": [
+  "name": "released_config_needs_approval_date",
+  "kind": "attribute",
+  "type": "Config PDP",
+  "assertions": [
     {
-      "source_attr": "ApprovalDate",
+      "attr": "ApprovalDate",
       "operator": "not_empty",
-      "when": {
-        "attr": "State.Value",
-        "operator": "equals",
-        "value": "Released"
-      }
+      "when": { "attr": "State.Value", "operator": "equals", "value": "Released" }
     }
   ]
 }
 ```
 
-**Regex pattern** -- Part number must follow a standard format:
+**Regex pattern** — IFU PDP number must follow a standard format:
 
 ```json
 {
-  "name": "part_number_format",
-  "description": "Part PDP Number must match standard format",
-  "source_type": "Part PDP",
-  "target_type": "Part PDP",
-  "match_on": "Number",
-  "comparisons": [
-    {
-      "source_attr": "Number",
-      "operator": "matches",
-      "value": "^[A-Z]{2,4}-\\d{4,6}$"
-    }
+  "name": "ifu_pdp_number_format",
+  "kind": "attribute",
+  "type": "IFU PDP",
+  "assertions": [
+    { "attr": "Number", "operator": "matches", "value": "^[A-Z]{2,4}-\\d{4,6}$" }
   ]
 }
 ```
 
-**Numeric threshold** -- Version must be greater than 0:
+**Relationship coverage** — every IFU PDP must be used by a Config PDP:
 
 ```json
 {
-  "name": "config_options_version_positive",
-  "description": "Config Options PDP VersionNumber must be greater than 0",
-  "source_type": "Config Options PDP",
-  "target_type": "Config Options PDP",
-  "match_on": "Number",
+  "name": "ifu_pdp_used_by_config_pdp",
+  "kind": "relationship",
+  "type": "IFU PDP",
+  "related_type": "Config PDP",
+  "via": "used_by",
+  "on_missing": "fail",
   "comparisons": [
-    {
-      "source_attr": "VersionNumber",
-      "operator": "greater_than",
-      "value": "0"
-    }
-  ]
-}
-```
-
-**Date boundary** -- Documents must have been modified after a baseline date:
-
-```json
-{
-  "name": "ifu_modified_after_baseline",
-  "description": "IFU Documents must have been modified after the 2024-01-01 baseline",
-  "source_type": "IFU Document",
-  "target_type": "IFU Document",
-  "match_on": "Number",
-  "comparisons": [
-    {
-      "source_attr": "LastModified",
-      "operator": "after",
-      "value": "2024-01-01"
-    }
+    { "source_attr": "Number", "target_attr": "Number", "operator": "not_empty" }
   ]
 }
 ```
@@ -461,7 +476,7 @@ from oneplm_ingestion.dataframe import load_objects, load_check_results, load_sy
 df = load_objects("data/oneplm.db")
 
 # Load a specific type
-parts = load_objects("data/oneplm.db", type_name="Part PDP")
+parts = load_objects("data/oneplm.db", type_name="IFU PDP")
 
 # Load without expanding the JSON attributes column
 raw = load_objects("data/oneplm.db", expand_attributes=False)

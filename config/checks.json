@@ -1,76 +1,81 @@
 [
   {
-    "name": "pdp_ifu_regulatory_class_match",
-    "description": "Part PDP and IFU Document must have the same RegulatoryClass",
-    "source_type": "Part PDP",
-    "target_type": "IFU Document",
-    "match_on": "Number",
-    "comparisons": [
+    "name": "config_pdp_attributes",
+    "kind": "attribute",
+    "type": "Config PDP",
+    "description": "Config PDP records must carry the core required attributes.",
+    "assertions": [
+      { "attr": "Number", "operator": "not_empty" },
+      { "attr": "Name", "operator": "not_empty" },
       {
-        "source_attr": "RegulatoryClass",
-        "target_attr": "RegulatoryClass",
-        "operator": "equals"
-      }
-    ]
-  },
-  {
-    "name": "released_parts_need_approval_date",
-    "description": "When a Part PDP is Released, its ApprovalDate must not be empty",
-    "source_type": "Part PDP",
-    "target_type": "Part PDP",
-    "match_on": "Number",
-    "comparisons": [
-      {
-        "source_attr": "ApprovalDate",
+        "attr": "ApprovalDate",
         "operator": "not_empty",
-        "when": {
-          "attr": "State.Value",
-          "operator": "equals",
-          "value": "Released"
-        }
+        "when": { "attr": "State.Value", "operator": "equals", "value": "Released" }
       }
     ]
   },
   {
-    "name": "part_number_format",
-    "description": "Part PDP Number must match standard format (2-4 uppercase letters, dash, 4-6 digits)",
-    "source_type": "Part PDP",
-    "target_type": "Part PDP",
-    "match_on": "Number",
-    "comparisons": [
-      {
-        "source_attr": "Number",
-        "operator": "matches",
-        "value": "^[A-Z]{2,4}-\\d{4,6}$"
-      }
+    "name": "ifu_pdp_attributes",
+    "kind": "attribute",
+    "type": "IFU PDP",
+    "description": "IFU PDP records must carry the core required attributes.",
+    "assertions": [
+      { "attr": "Number", "operator": "not_empty" },
+      { "attr": "Name", "operator": "not_empty" },
+      { "attr": "ConfigurableModule.Value", "operator": "equals", "value": "No" }
     ]
   },
   {
-    "name": "config_options_version_positive",
-    "description": "Config Options PDP VersionNumber must be greater than 0",
-    "source_type": "Config Options PDP",
-    "target_type": "Config Options PDP",
-    "match_on": "Number",
-    "comparisons": [
-      {
-        "source_attr": "VersionNumber",
-        "operator": "greater_than",
-        "value": "0"
-      }
+    "name": "ifu_drawing_attributes",
+    "kind": "attribute",
+    "type": "IFU Drawing",
+    "description": "IFU Drawing documents must be the correct doc type and have a number.",
+    "assertions": [
+      { "attr": "DocTypeName", "operator": "equals", "value": "IFU Drawing" },
+      { "attr": "Number", "operator": "not_empty" }
     ]
   },
   {
-    "name": "ifu_modified_after_baseline",
-    "description": "IFU Documents must have been modified after the 2024-01-01 baseline",
-    "source_type": "IFU Document",
-    "target_type": "IFU Document",
-    "match_on": "Number",
+    "name": "ifu_drawing_matches_ifu_pdp",
+    "kind": "relationship",
+    "type": "IFU Drawing",
+    "related_type": "IFU PDP",
+    "via": "describes",
+    "description": "An IFU Drawing and the IFU PDP it describes must share Name and Number.",
+    "on_missing": "fail",
     "comparisons": [
-      {
-        "source_attr": "LastModified",
-        "operator": "after",
-        "value": "2024-01-01"
-      }
+      { "source_attr": "Name", "target_attr": "Name", "operator": "equals" },
+      { "source_attr": "Number", "target_attr": "Number", "operator": "equals" }
     ]
+  },
+  {
+    "name": "ifu_pdp_used_by_config_pdp",
+    "kind": "relationship",
+    "type": "IFU PDP",
+    "related_type": "Config PDP",
+    "via": "used_by",
+    "description": "Every IFU PDP must be used by at least one Config PDP.",
+    "on_missing": "fail",
+    "comparisons": [
+      { "source_attr": "Number", "target_attr": "Number", "operator": "not_empty" }
+    ]
+  },
+  {
+    "name": "config_pdp_uses_match",
+    "kind": "relationship",
+    "type": "Config PDP",
+    "related_type": "IFU PDP",
+    "via": "uses",
+    "description": "Each IFU PDP used by a Config PDP must be in the Released state.",
+    "on_missing": "skip",
+    "comparisons": [
+      { "source_attr": "State.Value", "target_attr": "State.Value", "operator": "equals" }
+    ]
+  },
+  {
+    "name": "ifu_drawing_pdf_filename",
+    "kind": "python",
+    "function": "ifu_drawing_pdf_filename",
+    "description": "Validate IFU Drawing primary-content PDF filenames against metadata."
   }
 ]

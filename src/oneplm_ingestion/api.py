@@ -67,8 +67,11 @@ class WindchillClient:
         resp = self.session.get(url, params=params, timeout=self.timeout)
         elapsed = time.monotonic() - t0
         log.debug("  -> %s in %.2fs", resp.status_code, elapsed)
+        log.debug("  -> final url: %s", resp.url)
         resp.raise_for_status()
-        return resp.json()
+        data = resp.json()
+        log.debug("  -> response keys: %s", list(data.keys()) if isinstance(data, dict) else type(data).__name__)
+        return data
 
     def get_collection(self, endpoint: str, params: dict | None = None) -> list[dict]:
         """GET a paginated OData collection, follow @odata.nextLink, return all items."""
@@ -150,6 +153,14 @@ class WindchillClient:
     def get_part_uses(self, part_id: str) -> list[dict]:
         """Get PartUse links — child parts used by this part (BOM/assembly structure)."""
         return self.get_collection(f"{PRODMGMT}/Parts('{part_id}')/Uses")
+
+    def get_uses_part(self, part_id: str, part_use_id: str) -> dict:
+        """Follow a PartUse link to the child part it uses."""
+        return self.get(f"{PRODMGMT}/Parts('{part_id}')/Uses('{part_use_id}')/Uses")
+
+    def get_part_used_by(self, part_id: str) -> list[dict]:
+        """Get parent parts that use this part — returns Part entities directly."""
+        return self.get_collection(f"{PRODMGMT}/Parts('{part_id}')/UsedBy")
 
     # ------------------------------------------------------------------
     # Content / PDF

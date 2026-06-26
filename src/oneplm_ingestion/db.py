@@ -82,6 +82,7 @@ CREATE TABLE IF NOT EXISTS relationships (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     source_id       TEXT NOT NULL,
     target_id       TEXT,
+    target_number   TEXT,
     rel_type        TEXT NOT NULL,
     attributes_json TEXT NOT NULL,
     synced_at       TEXT NOT NULL
@@ -89,6 +90,7 @@ CREATE TABLE IF NOT EXISTS relationships (
 
 CREATE INDEX IF NOT EXISTS idx_relationships_source ON relationships(source_id);
 CREATE INDEX IF NOT EXISTS idx_relationships_type   ON relationships(rel_type, source_id);
+CREATE INDEX IF NOT EXISTS idx_relationships_target ON relationships(rel_type, target_id);
 """
 
 
@@ -111,11 +113,15 @@ def init_db(conn: sqlite3.Connection) -> None:
 
 def _run_migrations(conn: sqlite3.Connection) -> None:
     """Apply incremental schema changes to existing databases."""
-    try:
-        conn.execute("ALTER TABLE objects ADD COLUMN folder_id TEXT REFERENCES folders(id)")
-        conn.commit()
-    except sqlite3.OperationalError:
-        pass  # column already exists
+    for stmt in (
+        "ALTER TABLE objects ADD COLUMN folder_id TEXT REFERENCES folders(id)",
+        "ALTER TABLE relationships ADD COLUMN target_number TEXT",
+    ):
+        try:
+            conn.execute(stmt)
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass  # column already exists
 
 
 # --- Objects ---
@@ -343,16 +349,48 @@ def _row_to_folder(row: sqlite3.Row) -> Folder:
 def save_relationships(
     conn: sqlite3.Connection, source_id: str, rel_type: str, items: list[dict], synced_at: str
 ) -> None:
-    """Replace all relationships of a given type for an object (delete then insert)."""
+    """Replace all relationships of a given type for an object (delete then insert).
+
+    Each item's ``ID`` is stored as ``target_id`` and ``Number`` as
+    ``target_number``. For resolved relationships (described_by, uses, used_by)
+    these are the related object's real ID/Number; for raw link relationships
+    they are the link's own ID with no number.
+    """
     conn.execute(
         "DELETE FROM relationships WHERE source_id = ? AND rel_type = ?",
         (source_id, rel_type),
     )
     conn.executemany(
-        """INSERT INTO relationships (source_id, target_id, rel_type, attributes_json, synced_at)
-           VALUES (?, ?, ?, ?, ?)""",
-        [(source_id, item.get("ID"), rel_type, json.dumps(item), synced_at) for item in items],
+        """INSERT INTO relationships
+               (source_id, target_id, target_number, rel_type, attributes_json, synced_at)
+           VALUES (?, ?, ?, ?, ?, ?)""",
+        [
+            (source_id, item.get("ID"), item.get("Number"), rel_type, json.dumps(item), synced_at)
+            for item in items
+        ],
     )
+
+
+def get_relationship_target_ids(
+    conn: sqlite3.Connection, source_id: str, rel_type: str
+) -> list[str]:
+    """Forward traversal: related object IDs stored on ``source_id`` for ``rel_type``."""
+    rows = conn.execute(
+        "SELECT target_id FROM relationships WHERE source_id = ? AND rel_type = ? AND target_id IS NOT NULL",
+        (source_id, rel_type),
+    ).fetchall()
+    return [row["target_id"] for row in rows]
+
+
+def get_relationship_source_ids(
+    conn: sqlite3.Connection, target_id: str, rel_type: str
+) -> list[str]:
+    """Inverse traversal: source object IDs whose ``rel_type`` points at ``target_id``."""
+    rows = conn.execute(
+        "SELECT source_id FROM relationships WHERE target_id = ? AND rel_type = ?",
+        (target_id, rel_type),
+    ).fetchall()
+    return [row["source_id"] for row in rows]
 
 
 def get_relationships_for_object(
