@@ -32,7 +32,10 @@ CheckFn = Callable[[object], list[CheckResult]]
 CHECK_REGISTRY: dict[str, CheckFn] = {}
 
 # Modules that register check functions on import.
-_BUILTIN_MODULES = ("oneplm_ingestion.content_checks",)
+_BUILTIN_MODULES = (
+    "oneplm_ingestion.content_checks",
+    "oneplm_ingestion.ifu_classification",
+)
 
 _builtins_loaded = False
 

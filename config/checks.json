@@ -77,5 +77,11 @@
     "kind": "python",
     "function": "ifu_drawing_pdf_filename",
     "description": "Validate IFU Drawing primary-content PDF filenames against metadata."
+  },
+  {
+    "name": "config_pdp_ifu_classification",
+    "kind": "python",
+    "function": "config_pdp_ifu_classification",
+    "description": "Classify each Config PDP as eIFU / Hybrid / Print from its IFU PDP numbering."
   }
 ]

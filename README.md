@@ -22,8 +22,12 @@ pip install -e ".[notebook]"
 ## Quick Start
 
 ```bash
-# Set your Windchill base URL
-set ONEPLM_BASE_URL=https://your-host/Windchill/servlet/odata
+# Set your Windchill base URL (a real shell variable — there is no .env auto-loading).
+# It is read from the environment on each command, so set it in every new session
+# or add it to your shell profile.
+set ONEPLM_BASE_URL=https://your-host/Windchill/servlet/odata     # Windows cmd
+# $env:ONEPLM_BASE_URL = "https://your-host/Windchill/servlet/odata"   # PowerShell
+# export ONEPLM_BASE_URL=https://your-host/Windchill/servlet/odata     # bash
 
 # Store credentials (saved in the Windows keyring)
 oneplm auth login
@@ -31,12 +35,15 @@ oneplm auth login
 # Initialize the local database
 oneplm init
 
-# Sync typed objects (documents, parts)
+# Sync typed objects (Config PDPs, IFU PDPs, IFU Drawings)
 oneplm sync objects
 
 # Edit config/containers.json with your real container ID(s)
 # then sync the folder hierarchy
 oneplm sync folder
+
+# Resolve relationships (required before relationship checks)
+oneplm sync relationships
 
 # Run validation checks
 oneplm check
