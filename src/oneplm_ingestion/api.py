@@ -187,10 +187,19 @@ class WindchillClient:
                 return None
             raise
 
-    def get_pdf_content_urls(self, object_id: str, domain: str = DOCMGMT, collection: str = "Documents") -> list[dict]:
+    def get_pdf_content_urls(
+        self,
+        object_id: str,
+        domain: str = DOCMGMT,
+        collection: str = "Documents",
+        include_attachments: bool = True,
+    ) -> list[dict]:
         """Get download info for content attached to an object.
 
         Returns list of dicts: {"url": ..., "filename": ..., "role": "primary"|"attachment"}
+
+        Set include_attachments=False to fetch only the document's primary content
+        and skip the attachments request entirely.
         """
         results = []
 
@@ -203,6 +212,9 @@ class WindchillClient:
                     "filename": primary.get("FileName", "primary_content.pdf"),
                     "role": "primary",
                 })
+
+        if not include_attachments:
+            return results
 
         # Get all attachments
         attachments = self.get_attachments(domain, collection, object_id)

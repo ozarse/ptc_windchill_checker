@@ -140,3 +140,17 @@ def test_shipped_checks_config_parses():
     assert "AttributeCheck" in kinds
     assert "RelationshipCheck" in kinds
     assert "PythonCheck" in kinds
+
+
+def test_skip_pdf_excludes_marked_checks(conn, tmp_path):
+    cfg = _write_checks(tmp_path, [
+        {"name": "plain", "kind": "attribute", "type": "Config PDP",
+         "assertions": [{"attr": "Number", "operator": "not_empty"}]},
+        {"name": "pdf_one", "kind": "attribute", "type": "Config PDP", "requires_pdf": True,
+         "assertions": [{"attr": "Number", "operator": "not_empty"}]},
+    ])
+    with_pdf = run_all_checks(conn, cfg)
+    assert set(with_pdf) == {"plain", "pdf_one"}
+
+    without_pdf = run_all_checks(conn, cfg, skip_pdf=True)
+    assert set(without_pdf) == {"plain"}

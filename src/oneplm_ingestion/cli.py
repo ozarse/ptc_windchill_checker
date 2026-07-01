@@ -303,30 +303,46 @@ def pdf():
 @click.option("--types-config", default=str(DEFAULT_TYPES_CONFIG), help="Path to types.json")
 @click.option("--metadata-only", is_flag=True,
               help="Store content URL and filename in the DB without downloading the file.")
+@click.option("--primary-only", is_flag=True,
+              help="Download only the document's primary content, skipping attachments.")
+@click.option("--force", is_flag=True,
+              help="Re-download files that already exist on disk (default: skip existing).")
 @click.pass_context
-def pdf_download(ctx, type_name, object_id, types_config, metadata_only):
+def pdf_download(ctx, type_name, object_id, types_config, metadata_only, primary_only, force):
     """Fetch PDF content from Windchill for local objects.
 
-    By default, downloads the actual files to disk. Use --metadata-only to
-    store only the filename and download URL in the database without downloading.
+    By default, downloads the actual files to disk, skipping any file that
+    already exists on disk unless the object changed in Windchill since it was
+    last downloaded. Use --force to re-download everything, --metadata-only to
+    store only the filename and download URL without downloading, and
+    --primary-only to fetch just the document's primary content and skip
+    attachments.
     """
     from oneplm_ingestion.api import WindchillClient
-    from oneplm_ingestion.db import get_connection, get_objects_by_type
+    from oneplm_ingestion.db import get_connection, get_object_by_id, get_objects_by_type
     from oneplm_ingestion.pdf import download_pdfs_for_object, fetch_pdf_metadata_for_object
     from oneplm_ingestion.sync import load_type_configs
 
     conn = get_connection(ctx.obj["db_path"])
     client = WindchillClient(dry_run=ctx.obj["dry_run"])
+    include_attachments = not primary_only
 
-    def _process(obj_id, domain="v6/DocMgmt", collection="Documents"):
+    def _process(obj_id, domain="v6/DocMgmt", collection="Documents", last_modified=None):
         if metadata_only:
-            return fetch_pdf_metadata_for_object(client, conn, obj_id, domain=domain, collection=collection)
-        return download_pdfs_for_object(client, conn, obj_id, ctx.obj["data_dir"], domain=domain, collection=collection)
+            return fetch_pdf_metadata_for_object(
+                client, conn, obj_id, domain=domain, collection=collection,
+                include_attachments=include_attachments,
+            )
+        return download_pdfs_for_object(
+            client, conn, obj_id, ctx.obj["data_dir"], domain=domain, collection=collection,
+            include_attachments=include_attachments, force=force, last_modified=last_modified,
+        )
 
     verb = "Fetched metadata" if metadata_only else "Downloaded"
 
     if object_id:
-        pdfs = _process(object_id)
+        obj = get_object_by_id(conn, object_id)
+        pdfs = _process(object_id, last_modified=obj.last_modified if obj else None)
         click.echo(f"{verb} {len(pdfs)} PDF(s) for {object_id}")
     elif type_name:
         type_configs = load_type_configs(Path(types_config))
@@ -338,7 +354,7 @@ def pdf_download(ctx, type_name, object_id, types_config, metadata_only):
         total = 0
         for obj in objects:
             click.echo(f"  Processing {obj.number or obj.id}...")
-            pdfs = _process(obj.id, domain=domain, collection=collection)
+            pdfs = _process(obj.id, domain=domain, collection=collection, last_modified=obj.last_modified)
             total += len(pdfs)
         click.echo(f"{verb} {total} PDF(s) for {len(objects)} objects")
     else:
@@ -414,16 +430,21 @@ def pdf_check(ctx):
 @cli.command()
 @click.option("--checks-config", default=str(DEFAULT_CHECKS_CONFIG), help="Path to checks.json")
 @click.option("--check", "check_names", multiple=True, help="Run only these checks. Repeatable.")
+@click.option("--skip-pdf", is_flag=True,
+              help="Skip checks marked 'requires_pdf' (use when PDFs aren't downloaded).")
 @click.pass_context
-def check(ctx, checks_config, check_names):
+def check(ctx, checks_config, check_names, skip_pdf):
     """Run attribute validation checks against local data."""
     from oneplm_ingestion.checks import run_all_checks
     from oneplm_ingestion.db import get_connection
 
     conn = get_connection(ctx.obj["db_path"])
+    if skip_pdf:
+        click.echo("Skipping PDF-dependent checks (--skip-pdf)")
     results = run_all_checks(
         conn, Path(checks_config),
         check_names=list(check_names) if check_names else None,
+        skip_pdf=skip_pdf,
     )
     for name, checks in results.items():
         passed = sum(1 for r in checks if r.passed)

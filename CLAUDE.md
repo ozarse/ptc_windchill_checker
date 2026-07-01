@@ -162,7 +162,7 @@ Use `--containers-config <path>` to point at a different config file.
 
 ### Validation Checks
 
-Checks are defined declaratively in [config/checks.json](config/checks.json) and executed by [checks.py](src/oneplm_ingestion/checks.py). Each entry has a `kind`:
+Checks are defined declaratively in [config/checks.json](config/checks.json) and executed by [checks.py](src/oneplm_ingestion/checks.py). [docs/CHECKS.md](docs/CHECKS.md) is the human-readable catalog of every check, its data prerequisites, and open items — keep it in sync when checks change. Each entry has a `kind`:
 
 - **`attribute`** — validates attributes of individual records of one `type`. Carries a list of `assertions`, each an `attr` + `operator` (+ optional `value`, + optional `when`).
 - **`relationship`** — validates a record against the records reached through a Windchill relationship. Names a source `type`, a `related_type`, and a `via` (one of `describes`, `described_by`, `uses`, `used_by`), then runs `comparisons` between source and related attributes. `on_missing` (`fail` | `skip`) controls behaviour when no related record exists.

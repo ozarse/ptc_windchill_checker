@@ -62,9 +62,10 @@ oneplm export checks -o check_results.csv
 | `oneplm auth logout` | Remove stored credentials |
 | `oneplm auth status` | Check if credentials are stored |
 | `oneplm sync objects` | Sync typed objects (documents, parts) from Windchill |
+| `oneplm sync relationships` | Resolve and store object relationships (needed for relationship/classification checks) |
 | `oneplm sync folder` | Sync folder hierarchy recursively from configured containers |
 | `oneplm lookup <number>` | Look up a document or part by number and show relationships |
-| `oneplm check` | Run validation checks against local data |
+| `oneplm check` | Run validation checks (`--skip-pdf` to exclude PDF-dependent checks) |
 | `oneplm pdf download` | Download PDFs from Windchill |
 | `oneplm pdf extract` | Extract text from downloaded PDFs using docling |
 | `oneplm export objects` | Export synced objects to CSV |
@@ -163,7 +164,7 @@ Objects are committed to the database after each folder, so a crash mid-run pres
 
 ## Attribute Validation Checks
 
-The check system validates the records ingested from Windchill. Checks are defined in `config/checks.json` and executed with `oneplm check`. Results (pass/fail/skip) are saved to the database and can be exported to CSV.
+The check system validates the records ingested from Windchill. Checks are defined in `config/checks.json` and executed with `oneplm check`. Results (pass/fail/skip) are saved to the database and can be exported to CSV. See [`docs/CHECKS.md`](docs/CHECKS.md) for the catalog of every check currently defined, its data prerequisites, and open items.
 
 ### Check Kinds
 
@@ -424,10 +425,13 @@ Types are defined in `config/types.json`. The default types are:
 oneplm check
 
 # Run a specific check by name
-oneplm check --check released_parts_need_approval_date
+oneplm check --check ifu_drawing_matches_ifu_pdp
 
 # Run multiple specific checks
-oneplm check --check part_number_format --check ifu_modified_after_baseline
+oneplm check --check config_pdp_attributes --check ifu_pdp_attributes
+
+# Skip checks that need PDF data (marked "requires_pdf") when PDFs aren't downloaded
+oneplm check --skip-pdf
 
 # Use a different config file
 oneplm check --checks-config path/to/my_checks.json
@@ -438,6 +442,12 @@ oneplm export checks -o check_results.csv
 # Export only failures
 oneplm export checks --failed-only -o failures.csv
 ```
+
+Checks that read the `pdfs` table are marked `"requires_pdf": true` in
+`config/checks.json`. `--skip-pdf` excludes them, so you can run the attribute,
+relationship, and classification checks before any PDFs are downloaded. See
+[`docs/CHECKS.md`](docs/CHECKS.md) for the full catalog and each check's data
+prerequisites.
 
 ### Check Results
 

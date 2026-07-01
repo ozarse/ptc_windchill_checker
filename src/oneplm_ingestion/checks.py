@@ -66,6 +66,7 @@ def load_check_configs(config_path: Path) -> list[Check]:
     checks: list[Check] = []
     for entry in raw:
         kind = entry.get("kind", "attribute")
+        requires_pdf = entry.get("requires_pdf", False)
         if kind == "attribute":
             assertions = [
                 Assertion(
@@ -81,6 +82,7 @@ def load_check_configs(config_path: Path) -> list[Check]:
                 type=entry["type"],
                 description=entry.get("description", ""),
                 assertions=assertions,
+                requires_pdf=requires_pdf,
             ))
         elif kind == "relationship":
             comparisons = [
@@ -101,12 +103,14 @@ def load_check_configs(config_path: Path) -> list[Check]:
                 description=entry.get("description", ""),
                 comparisons=comparisons,
                 on_missing=entry.get("on_missing", "fail"),
+                requires_pdf=requires_pdf,
             ))
         elif kind == "python":
             checks.append(PythonCheck(
                 name=entry["name"],
                 function=entry["function"],
                 description=entry.get("description", ""),
+                requires_pdf=requires_pdf,
             ))
         else:
             raise ValueError(f"Unknown check kind '{kind}' in check '{entry.get('name')}'")
@@ -274,11 +278,21 @@ def run_all_checks(
     conn,
     config_path: Path,
     check_names: list[str] | None = None,
+    skip_pdf: bool = False,
 ) -> dict[str, list[CheckResult]]:
-    """Run all (or named) checks, save results to the DB, and return them."""
+    """Run all (or named) checks, save results to the DB, and return them.
+
+    When ``skip_pdf`` is True, checks marked ``requires_pdf`` are excluded (useful
+    when PDFs have not been downloaded/extracted).
+    """
     checks = load_check_configs(config_path)
     if check_names:
         checks = [c for c in checks if c.name in check_names]
+    if skip_pdf:
+        skipped = [c.name for c in checks if c.requires_pdf]
+        if skipped:
+            log.info("Skipping %d PDF check(s): %s", len(skipped), ", ".join(skipped))
+        checks = [c for c in checks if not c.requires_pdf]
 
     all_results: dict[str, list[CheckResult]] = {}
     for chk in checks:

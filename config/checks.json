@@ -76,6 +76,7 @@
     "name": "ifu_drawing_pdf_filename",
     "kind": "python",
     "function": "ifu_drawing_pdf_filename",
+    "requires_pdf": true,
     "description": "Validate IFU Drawing primary-content PDF filenames against metadata."
   },
   {
@@ -88,6 +89,7 @@
     "name": "ifu_drawing_pdf_language",
     "kind": "python",
     "function": "ifu_drawing_pdf_language",
+    "requires_pdf": true,
     "description": "Check the PDF filename language code matches the title, number, and last page."
   }
 ]

@@ -121,6 +121,7 @@ class AttributeCheck:
     description: str = ""
     assertions: list[Assertion] = field(default_factory=list)
     kind: str = "attribute"
+    requires_pdf: bool = False  # Reads PDF data; excluded by `check --skip-pdf`
 
 
 @dataclass
@@ -140,6 +141,7 @@ class RelationshipCheck:
     comparisons: list[RelationshipComparison] = field(default_factory=list)
     on_missing: str = "fail"
     kind: str = "relationship"
+    requires_pdf: bool = False  # Reads PDF data; excluded by `check --skip-pdf`
 
 
 @dataclass
@@ -150,3 +152,4 @@ class PythonCheck:
     function: str  # Key in checks.registry.CHECK_REGISTRY
     description: str = ""
     kind: str = "python"
+    requires_pdf: bool = False  # Reads PDF data; excluded by `check --skip-pdf`
