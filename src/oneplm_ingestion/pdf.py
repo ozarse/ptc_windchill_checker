@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -11,6 +12,14 @@ from oneplm_ingestion.db import upsert_pdf
 from oneplm_ingestion.models import PDFContent
 
 log = logging.getLogger(__name__)
+
+# Characters that are illegal in Windows filenames (colon appears in Windchill IDs).
+_INVALID_FILENAME_CHARS = re.compile(r'[<>:"/\\|?*]')
+
+
+def safe_filename(name: str) -> str:
+    """Replace characters that are invalid in filenames (notably ':' on Windows)."""
+    return _INVALID_FILENAME_CHARS.sub("_", name)
 
 
 def ensure_pdf_dir(data_dir: Path) -> Path:
@@ -59,7 +68,7 @@ def download_pdfs_for_object(
     results = []
     for info in pdf_infos:
         filename = info["filename"]
-        local_path = str(pdf_dir / f"{object_id}_{filename}")
+        local_path = str(pdf_dir / safe_filename(f"{object_id}_{filename}"))
         client.download_file(info["url"], local_path)
         pdf = PDFContent(
             object_id=object_id,

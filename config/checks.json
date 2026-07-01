@@ -83,5 +83,11 @@
     "kind": "python",
     "function": "config_pdp_ifu_classification",
     "description": "Classify each Config PDP as eIFU / Hybrid / Print from its IFU PDP numbering."
+  },
+  {
+    "name": "ifu_drawing_pdf_language",
+    "kind": "python",
+    "function": "ifu_drawing_pdf_language",
+    "description": "Check the PDF filename language code matches the title, number, and last page."
   }
 ]

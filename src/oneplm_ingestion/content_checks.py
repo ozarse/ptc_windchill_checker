@@ -23,6 +23,12 @@ from oneplm_ingestion.registry import register_check
 log = logging.getLogger(__name__)
 
 CHECK_NAME = "Content Change Required"
+LANG_CHECK_NAME = "IFU Drawing PDF Language"
+
+# How many trailing characters of the extracted text to treat as "the last page"
+# when looking for the language code/footer. Approximate — the stored text is one
+# whole-document markdown blob with no page boundaries.
+TAIL_CHARS = 1200
 
 # ISO 639-1 two-letter language codes (lowercase).
 # Source: https://localizely.com/iso-639-1-list/
@@ -235,6 +241,94 @@ def run_pdf_filename_checks(conn) -> list[CheckResult]:
                         f"{'==' if lang_match else '!='} filename language '{lang_code}'"
                     ),
                     checked_at=now,
+                ))
+
+    return results
+
+
+def code_token_present(text: str | None, code: str) -> bool:
+    """True if ``code`` appears in ``text`` as a standalone token.
+
+    The 2-letter code must not be flanked by other letters, so it matches
+    "IFU_EN", "IFU EN", "EN.", "-EN" but not "ENGINE" or "TENET".
+    """
+    if not text or not code:
+        return False
+    pattern = r"(?<![A-Za-z])" + re.escape(code) + r"(?![A-Za-z])"
+    return re.search(pattern, text, re.IGNORECASE) is not None
+
+
+@register_check("ifu_drawing_pdf_language")
+def run_pdf_language_checks(conn) -> list[CheckResult]:
+    """Check that an IFU Drawing PDF's language is consistent across sources.
+
+    The language code parsed from the primary PDF filename is the reference. For
+    each IFU Drawing with primary-PDF metadata it verifies the code matches:
+      1. Title      — appears as a standalone token in the drawing's Name
+      2. Number     — equals the -XX language suffix on the drawing Number
+      3. Last page  — appears as a standalone token in the tail of the extracted
+                      PDF text (requires 'pdf extract'; skipped if unavailable)
+    """
+    now = datetime.now(timezone.utc).isoformat()
+    results: list[CheckResult] = []
+
+    ifu_drawings = get_objects_by_type(conn, "IFU Drawing")
+    log.info("Running PDF language checks for %d IFU Drawings", len(ifu_drawings))
+
+    for drawing in ifu_drawings:
+        primary_pdfs = [p for p in get_pdfs_for_object(conn, drawing.id)
+                        if p.content_role == "primary"]
+        for pdf in primary_pdfs:
+            parsed = parse_pdf_filename(pdf.filename)
+            if parsed is None:
+                continue  # filename format is validated by run_pdf_filename_checks
+            code = parsed["language"].upper()
+
+            def _result(target_attr, target_value, passed, message):
+                return CheckResult(
+                    check_name=LANG_CHECK_NAME,
+                    source_object_id=drawing.id,
+                    target_object_id=pdf.filename,
+                    source_attr="FileName Language",
+                    target_attr=target_attr,
+                    source_value=code,
+                    target_value=target_value,
+                    passed=passed,
+                    message=message,
+                    checked_at=now,
+                )
+
+            # 1. Title
+            name = drawing.name or ""
+            title_ok = code_token_present(name, code)
+            results.append(_result(
+                "Title", name, title_ok,
+                f"{'PASS' if title_ok else 'FAIL'}: filename language '{code}' "
+                f"{'found in' if title_ok else 'not found in'} title '{name}'",
+            ))
+
+            # 2. Number suffix
+            num_code = _extract_language_suffix(drawing.number or "")
+            number_ok = num_code == code
+            results.append(_result(
+                "Number", num_code, number_ok,
+                f"{'PASS' if number_ok else 'FAIL'}: filename language '{code}' "
+                f"{'==' if number_ok else '!='} number suffix '{num_code}'",
+            ))
+
+            # 3. Last page of the PDF (tail of extracted text)
+            if pdf.extracted_text:
+                tail = pdf.extracted_text[-TAIL_CHARS:]
+                page_ok = code_token_present(tail, code)
+                results.append(_result(
+                    "Last Page", "present" if page_ok else "absent", page_ok,
+                    f"{'PASS' if page_ok else 'FAIL'}: filename language '{code}' "
+                    f"{'found' if page_ok else 'not found'} on last page of PDF",
+                ))
+            else:
+                results.append(_result(
+                    "Last Page", None, True,
+                    "SKIP: no extracted PDF text; run 'oneplm pdf extract' first",
                 ))
 
     return results
