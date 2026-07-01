@@ -66,8 +66,9 @@ oneplm export checks -o check_results.csv
 | `oneplm sync folder` | Sync folder hierarchy recursively from configured containers |
 | `oneplm lookup <number>` | Look up a document or part by number and show relationships |
 | `oneplm check` | Run validation checks (`--skip-pdf` to exclude PDF-dependent checks) |
-| `oneplm pdf download` | Download PDFs from Windchill |
+| `oneplm pdf download` | Download PDFs from Windchill (skips existing files unless changed; `--force`, `--primary-only`, `--metadata-only`) |
 | `oneplm pdf extract` | Extract text from downloaded PDFs using docling |
+| `oneplm pdf check` | Validate IFU Drawing filenames against object metadata |
 | `oneplm export objects` | Export synced objects to CSV |
 | `oneplm export checks` | Export check results to CSV |
 
@@ -159,6 +160,70 @@ Objects are committed to the database after each folder, so a crash mid-run pres
 - `name`, `location` — the API `Location` field is the **parent** path (e.g. `/Default`); the folder's own full path is `location + "/" + name` (e.g. `/Default/01 - Parts`)
 - `parent_folder_id` — self-referencing FK set during recursive traversal
 - `container_id` — which container this folder belongs to
+
+---
+
+## PDF Download & Extraction
+
+`oneplm pdf download` fetches content for objects already in the local database
+(sync them with `oneplm sync objects` or `oneplm sync folder` first). Files are
+saved under the data directory in `pdfs/` (default `data/pdfs/`) and each file's
+metadata is recorded in the `pdfs` table.
+
+```bash
+# Download PDFs for every object of a type
+oneplm pdf download --type "IFU Drawing"
+
+# Download PDFs for a single object
+oneplm pdf download --object-id "OR:wt.doc.WTDocument:12345"
+
+# Extract text from downloaded PDFs (docling)
+oneplm pdf extract --all
+```
+
+### Download Options
+
+| Option | Behavior |
+|---|---|
+| `--type <name>` | Download content for every object of this type (a `human_name` from `types.json`). |
+| `--object-id <id>` | Download content for a single object. |
+| `--primary-only` | Fetch only the document's primary content and skip attachments. Skips the attachments request entirely, so it is also faster. |
+| `--metadata-only` | Record each file's filename and download URL in the `pdfs` table **without** downloading the file. |
+| `--force` | Re-download files even if they already exist on disk. |
+
+Windchill object IDs contain characters that are illegal in Windows filenames
+(e.g. `:`); these are sanitized to `_` when building the on-disk filename. The
+original ID is still stored in the `pdfs.object_id` column.
+
+### Skipping and Re-downloading
+
+By default the download is **resumable**: any file that already exists on disk is
+skipped (logged as `Skipping existing …`), so re-running after an interruption
+only fetches what is missing.
+
+A file that already exists is still re-downloaded automatically when the object
+changed in Windchill since it was last pulled — that is, when the object's
+`LastModified` is newer than the file's stored `downloaded_at`. When this
+happens the file is refreshed and its stale extracted text is cleared so the next
+`oneplm pdf extract` re-processes it. Use `--force` to re-download unconditionally.
+
+Because change detection compares against each object's `LastModified`, refresh
+the objects first so the timestamps are current:
+
+```bash
+oneplm sync objects                          # refreshes each object's LastModified
+oneplm pdf download --type "IFU Drawing"     # re-pulls only drawings that changed
+```
+
+`--metadata-only` never touches disk, so it ignores `--force` and change
+detection; it simply refreshes the URL/filename rows.
+
+### Filename Validation
+
+`oneplm pdf check` validates each IFU Drawing's primary-content filename against
+its metadata (number, revision, and language code), storing results in
+`check_results`. Populate PDF metadata first with either a full `pdf download` or
+`pdf download --metadata-only`.
 
 ---
 
