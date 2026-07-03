@@ -29,6 +29,7 @@ There are three kinds:
 | 7 | `ifu_drawing_pdf_filename` | python | IFU Drawing (PDF) | ✅ |
 | 8 | `config_pdp_ifu_classification` | python | Config PDP + IFU PDPs | 🟡 |
 | 9 | `ifu_drawing_pdf_language` | python | IFU Drawing (PDF) | 🟡 |
+| 10 | `previous_versions_not_in_concept` | python | All objects (version history) | 🟡 |
 
 **Data prerequisites**
 
@@ -37,6 +38,7 @@ There are three kinds:
 | Relationship checks (4, 5, 6) and classification (8) | `oneplm sync relationships` |
 | PDF filename / language checks (7, 9) | `oneplm pdf download` (filename needs `--metadata-only` minimum) |
 | Last-page portion of language check (9) | `oneplm pdf extract` |
+| Version check (10) | `oneplm sync versions` |
 
 Checks that read PDF data are marked `"requires_pdf": true` in `config/checks.json`
 (currently 7 and 9). Run `oneplm check --skip-pdf` to exclude them when PDFs
@@ -155,6 +157,26 @@ If a drawing has no extracted text, the last-page row is a SKIP (pass) prompting
 > If IFU last pages list *all* languages, every code (incl. the reference) will
 > appear and this passes regardless of the true language — revisit with a
 > tighter footer pattern or accurate per-page extraction if so.
+
+### 10. `previous_versions_not_in_concept` 🟡
+Source: [`versions.py`](../src/oneplm_ingestion/versions.py) ·
+function `previous_versions_not_in_concept`
+
+For each object with stored version history, the **previous** (non-latest)
+versions must not be in a concept-phase lifecycle state. Emits one row per object
+that has previous versions: PASS if none are in concept, FAIL listing the
+offending version(s) otherwise. Objects with no previous versions are skipped.
+
+Version history is fetched by `oneplm sync versions` (calls the Windchill
+`.../Versions` API for each object) and stored in the `versions` table, so the
+check runs offline. A version is judged "concept" if its `State.Value` **or**
+`State.Display` is in `CONCEPT_STATES` (matched case-insensitively).
+
+> 🟡 **Open — confirm the concept-phase state string.** `CONCEPT_STATES` at the
+> top of `versions.py` currently holds `{"concept"}` as a placeholder. Set it to
+> the real lifecycle state value(s)/label(s) for the concept phase in your
+> "Stryker Three Phase Development" lifecycle (e.g. the `State.Value` seen on a
+> concept-phase version).
 
 ---
 

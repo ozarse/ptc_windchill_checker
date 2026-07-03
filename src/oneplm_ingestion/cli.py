@@ -257,6 +257,59 @@ def sync_relationships(ctx, type_names, skip_existing):
     conn.close()
 
 
+@sync.command("versions")
+@click.option("--type", "type_names", multiple=True,
+              help="Sync versions only for objects of these types. Repeatable.")
+@click.option("--skip-existing", is_flag=True,
+              help="Skip objects that already have versions stored in the DB.")
+@click.pass_context
+def sync_versions(ctx, type_names, skip_existing):
+    """Fetch and store the version history for objects in the local database.
+
+    Calls the Windchill Versions API for each object and stores every version in
+    the versions table, so the version check can run offline.
+    """
+    from datetime import datetime, timezone
+
+    from oneplm_ingestion.api import WindchillClient
+    from oneplm_ingestion.db import (
+        get_all_objects,
+        get_connection,
+        get_objects_by_type,
+        init_db,
+        object_has_versions,
+    )
+    from oneplm_ingestion.versions import fetch_and_store_versions
+
+    conn = get_connection(ctx.obj["db_path"])
+    init_db(conn)
+    client = WindchillClient(dry_run=ctx.obj["dry_run"])
+    now = datetime.now(timezone.utc).isoformat()
+
+    if type_names:
+        objects = []
+        for tn in type_names:
+            objects.extend(get_objects_by_type(conn, tn))
+    else:
+        objects = get_all_objects(conn)
+
+    click.echo(f"Fetching versions for {len(objects)} objects...")
+    total = 0
+    skipped = 0
+    for obj in objects:
+        if skip_existing and object_has_versions(conn, obj.id):
+            skipped += 1
+            continue
+        total += fetch_and_store_versions(client, conn, obj, now)
+        conn.commit()
+
+    parts = [f"{total} version records stored"]
+    if skipped:
+        parts.append(f"{skipped} skipped (already in DB)")
+    click.echo("Done. " + ", ".join(parts) + ".")
+    conn.close()
+
+
 @sync.command("folder")
 @click.option("--containers-config", default=str(DEFAULT_CONTAINERS_CONFIG),
               help="Path to containers.json")

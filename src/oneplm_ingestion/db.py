@@ -91,6 +91,23 @@ CREATE TABLE IF NOT EXISTS relationships (
 CREATE INDEX IF NOT EXISTS idx_relationships_source ON relationships(source_id);
 CREATE INDEX IF NOT EXISTS idx_relationships_type   ON relationships(rel_type, source_id);
 CREATE INDEX IF NOT EXISTS idx_relationships_target ON relationships(rel_type, target_id);
+
+CREATE TABLE IF NOT EXISTS versions (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    object_id       TEXT NOT NULL,
+    version_oid     TEXT,
+    number          TEXT,
+    version         TEXT,
+    revision        TEXT,
+    state_value     TEXT,
+    state_display   TEXT,
+    is_latest       INTEGER,
+    created_on      TEXT,
+    attributes_json TEXT NOT NULL,
+    synced_at       TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_versions_object ON versions(object_id);
 """
 
 
@@ -397,6 +414,68 @@ def get_relationship_source_ids(
         (target_id, rel_type),
     ).fetchall()
     return [row["source_id"] for row in rows]
+
+
+# --- Versions ---
+
+
+def save_versions(
+    conn: sqlite3.Connection, object_id: str, versions: list[dict], synced_at: str
+) -> None:
+    """Replace the stored version history for an object (delete then insert).
+
+    ``versions`` are raw version entity dicts from the Versions API; State is the
+    nested enum ``{"Value", "Display"}``.
+    """
+    conn.execute("DELETE FROM versions WHERE object_id = ?", (object_id,))
+    rows = []
+    for v in versions:
+        state = v.get("State") or {}
+        state_value = state.get("Value") if isinstance(state, dict) else state
+        state_display = state.get("Display") if isinstance(state, dict) else None
+        rows.append((
+            object_id, v.get("ID"), v.get("Number"), v.get("Version"), v.get("Revision"),
+            state_value, state_display,
+            1 if v.get("Latest") else 0, v.get("CreatedOn"),
+            json.dumps(v), synced_at,
+        ))
+    conn.executemany(
+        """INSERT INTO versions
+               (object_id, version_oid, number, version, revision, state_value,
+                state_display, is_latest, created_on, attributes_json, synced_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        rows,
+    )
+
+
+def get_versions_for_object(conn: sqlite3.Connection, object_id: str) -> list[dict]:
+    """Load stored version rows for an object, newest first."""
+    rows = conn.execute(
+        "SELECT * FROM versions WHERE object_id = ? ORDER BY is_latest DESC, created_on DESC",
+        (object_id,),
+    ).fetchall()
+    return [
+        {
+            "object_id": r["object_id"],
+            "version_oid": r["version_oid"],
+            "number": r["number"],
+            "version": r["version"],
+            "revision": r["revision"],
+            "state_value": r["state_value"],
+            "state_display": r["state_display"],
+            "is_latest": bool(r["is_latest"]),
+            "created_on": r["created_on"],
+            "attributes": json.loads(r["attributes_json"]),
+        }
+        for r in rows
+    ]
+
+
+def object_has_versions(conn: sqlite3.Connection, object_id: str) -> bool:
+    """Whether any version rows are stored for an object."""
+    return conn.execute(
+        "SELECT 1 FROM versions WHERE object_id = ? LIMIT 1", (object_id,)
+    ).fetchone() is not None
 
 
 def get_relationships_for_object(

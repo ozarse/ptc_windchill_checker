@@ -82,6 +82,12 @@
     "description": "Classify each Config PDP as eIFU / Hybrid / Print from its IFU PDP numbering."
   },
   {
+    "name": "previous_versions_not_in_concept",
+    "kind": "python",
+    "function": "previous_versions_not_in_concept",
+    "description": "An object's previous (non-latest) versions must not be in the concept phase. Requires 'sync versions'."
+  },
+  {
     "name": "ifu_drawing_pdf_language",
     "kind": "python",
     "function": "ifu_drawing_pdf_language",

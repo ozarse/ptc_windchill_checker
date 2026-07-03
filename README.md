@@ -63,6 +63,7 @@ oneplm export checks -o check_results.csv
 | `oneplm auth status` | Check if credentials are stored |
 | `oneplm sync objects` | Sync typed objects (documents, parts) from Windchill |
 | `oneplm sync relationships` | Resolve and store object relationships (needed for relationship/classification checks) |
+| `oneplm sync versions` | Fetch and store each object's version history (needed for the version check) |
 | `oneplm sync folder` | Sync folder hierarchy recursively from configured containers |
 | `oneplm lookup <number>` | Look up a document or part by number and show relationships |
 | `oneplm check` | Run validation checks (`--skip-pdf` to exclude PDF-dependent checks) |

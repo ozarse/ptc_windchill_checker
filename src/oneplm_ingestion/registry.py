@@ -35,6 +35,7 @@ CHECK_REGISTRY: dict[str, CheckFn] = {}
 _BUILTIN_MODULES = (
     "oneplm_ingestion.content_checks",
     "oneplm_ingestion.ifu_classification",
+    "oneplm_ingestion.versions",
 )
 
 _builtins_loaded = False

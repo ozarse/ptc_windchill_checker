@@ -93,13 +93,14 @@ Ruff is configured in `pyproject.toml`: line length 120, target Python 3.10.
 
 ### Database
 
-Six tables in `data/oneplm.db`:
+Seven tables in `data/oneplm.db`:
 
 | Table | Purpose |
 |---|---|
 | `objects` | Windchill objects; full API response stored as `attributes_json`; `folder_id` FK to folders |
 | `folders` | Windchill folder hierarchy; `parent_folder_id` self-FK; `location` stores full path |
 | `relationships` | Per-object relationship metadata (attachments, DescribedBy links, DocUsageLinks, PartDocAssociations) |
+| `versions` | Per-object version history from the Versions API (`sync versions`); one row per version with its State |
 | `pdfs` | Downloaded PDF metadata and extracted text |
 | `check_results` | One row per comparison result |
 | `sync_log` | Last sync timestamp per type |

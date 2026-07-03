@@ -162,6 +162,14 @@ class WindchillClient:
         """Get parent parts that use this part — returns Part entities directly."""
         return self.get_collection(f"{PRODMGMT}/Parts('{part_id}')/UsedBy")
 
+    def get_versions(self, domain: str, collection: str, object_id: str) -> list[dict]:
+        """Get the full version history of an object.
+
+        Returns every version as a full entity dict (with State, Version,
+        Revision, Latest, etc.). Works for both Parts and Documents.
+        """
+        return self.get_collection(f"{domain}/{collection}('{object_id}')/Versions")
+
     # ------------------------------------------------------------------
     # Content / PDF
     # ------------------------------------------------------------------
