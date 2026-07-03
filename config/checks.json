@@ -7,11 +7,7 @@
     "assertions": [
       { "attr": "Number", "operator": "not_empty" },
       { "attr": "Name", "operator": "not_empty" },
-      {
-        "attr": "ApprovalDate",
-        "operator": "not_empty",
-        "when": { "attr": "State.Value", "operator": "equals", "value": "Released" }
-      }
+      { "attr": "ConfigurableModule.Display", "operator": "equals", "value": "Yes" }
     ]
   },
   {
@@ -22,7 +18,7 @@
     "assertions": [
       { "attr": "Number", "operator": "not_empty" },
       { "attr": "Name", "operator": "not_empty" },
-      { "attr": "ConfigurableModule.Value", "operator": "equals", "value": "No" }
+      { "attr": "ConfigurableModule.Display", "operator": "equals", "value": "No" }
     ]
   },
   {

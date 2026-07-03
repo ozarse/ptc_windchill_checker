@@ -33,12 +33,12 @@ def _obj(oid, type_name, number, extra_attrs=None):
 
 
 def _eifu_compliant():
-    return {ifc.ATTR_EIFU_ONLY: ifc.VAL_YES, ifc.ATTR_EIFU_FLAG: ifc.VAL_YES,
-            ifc.ATTR_DEFAULT_UNIT: ifc.VAL_UNIT_AS_NEEDED, ifc.ATTR_QUANTITY: ifc.VAL_QUANTITY_ZERO}
+    # StrykercorpeIFUFlag is a real boolean in the payload.
+    return {ifc.ATTR_EIFU_FLAG: True, ifc.ATTR_DEFAULT_UNIT: ifc.VAL_UNIT_AS_NEEDED}
 
 
 def _print_compliant():
-    return {ifc.ATTR_EIFU_FLAG: ifc.VAL_NO, ifc.ATTR_DEFAULT_UNIT: ifc.VAL_UNIT_PIECE}
+    return {ifc.ATTR_EIFU_FLAG: False, ifc.ATTR_DEFAULT_UNIT: ifc.VAL_UNIT_PIECE}
 
 
 def test_has_language_suffix():
@@ -125,7 +125,7 @@ def test_hybrid_print_part_uses_piece_rules(tmp_path):
 
     results = classify_config_pdps(conn)
     assert _classification_row(results, "CFG").passed is True
-    # the print part must NOT be checked for Quantity (only electronic parts are)
+    # Print part is checked with the print rules (eIFU Flag=False, Default Unit=Piece).
     print_part_rows = [r for r in results if r.source_object_id == "CFG-IFU1"]
     assert {r.target_attr for r in print_part_rows} == {"eIFU Flag", "Default Unit"}
 

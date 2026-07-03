@@ -10,3 +10,5 @@ data/pdfs/
 .env
 spec/
 nul
+spec/IFU*
+spec/Config*

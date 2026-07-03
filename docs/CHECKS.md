@@ -117,22 +117,23 @@ their part numbers end in a valid `-XX` language suffix:
 | None suffixed | **Print** | fail — needs review |
 | Mixed / none related | **Needs Review** | fail |
 
-Then per-IFU-PDP attribute compliance:
-- **eIFU** parts: `eIFU Only = Yes`, `Default Unit = As Needed`, `Quantity = 0`
-- **Hybrid**, electronic (`-XX`) parts: `eIFU Flag = Yes`, `Default Unit = As Needed`, `Quantity = 0`
-- **Hybrid**, print (non-`-XX`) part: `eIFU Flag = No`, `Default Unit = Piece`
+Then per-IFU-PDP attribute compliance (`StrykercorpeIFUFlag` is a boolean;
+`DefaultUnit` is an enum compared on `.Display`):
+- **eIFU** parts: `StrykercorpeIFUFlag == True`, `DefaultUnit.Display == "As Needed"`
+- **Hybrid**, electronic (`-XX`) parts: `StrykercorpeIFUFlag == True`, `DefaultUnit.Display == "As Needed"`
+- **Hybrid**, print (non-`-XX`) part: `StrykercorpeIFUFlag == False`, `DefaultUnit.Display == "Piece"`
 
 Emits one classification row per Config PDP plus one row per IFU PDP per attribute.
 The classification row passes only when the class is confident **and** all
 attribute checks pass.
 
-> 🟡 **Open — confirm attribute keys/values** (top of `ifu_classification.py`).
-> These are placeholders and will fail every part until matched to real data:
-> `ATTR_EIFU_ONLY = "eIFUOnly.Value"`, `ATTR_EIFU_FLAG = "eIFUFlag.Value"`,
-> `ATTR_DEFAULT_UNIT = "DefaultUnit.Value"`, `ATTR_QUANTITY = "Quantity"`.
-> Also confirm whether "eIFU Only" and "eIFU Flag" are one attribute or two.
-> Easiest source of truth: `oneplm export objects --type "IFU PDP"` and read the
-> column headers.
+> 🟡 **Open — the "Quantity = 0" check is not implemented.** The eIFU flag and
+> DefaultUnit are confirmed from the sample payloads and active. `Quantity` is
+> **not a Part attribute** — it is the PartUse usage-link quantity
+> (Config PDP `uses` IFU PDP), which `sync relationships` does not currently
+> store (it resolves the link straight to the child part). Enabling it requires
+> capturing the PartUse `Quantity` during relationship sync and pairing it to
+> each IFU PDP in this check.
 
 ### 9. `ifu_drawing_pdf_language` 🟡 · `requires_pdf`
 Source: [`content_checks.py`](../src/oneplm_ingestion/content_checks.py) ·

@@ -13,9 +13,11 @@ Classification for a Config PDP's related IFU PDPs:
   - anything else (mixed, or no IFU PDPs)  -> Needs Review
 
 Once classified, each IFU PDP is attribute-checked according to its class (see
-the EIFU_EXPECTATIONS / HYBRID_* tables): eIFU parts and the electronic parts of
-a hybrid must be flagged electronic with unit "As Needed" and quantity 0; the
-printed part of a hybrid must be flagged non-electronic with unit "Piece".
+the EIFU_EXPECTATIONS / HYBRID_* tables): electronic parts must have
+StrykercorpeIFUFlag true and DefaultUnit "As Needed"; the printed part of a
+hybrid must have StrykercorpeIFUFlag false and DefaultUnit "Piece". The
+"Quantity = 0" check is not implemented — that value lives on the PartUse
+usage-link, which the relationships sync does not yet store.
 
 Each Config PDP yields a classification CheckResult (``source_value`` is the
 label) followed by one CheckResult per IFU PDP per attribute. The classification
@@ -56,38 +58,37 @@ _RELATIONSHIP = "uses"
 _MAX_LISTED = 8
 
 # ---------------------------------------------------------------------------
-# Attribute compliance configuration — CONFIRM THESE AGAINST YOUR WINDCHILL DATA.
+# Attribute compliance configuration (confirmed from example IFU PDP payloads).
 #
-# These are the attribute keys (dot notation into the stored JSON payload; a
-# trailing ".Value" reads an OData enum) and the expected values used once a
-# Config PDP is classified. Best-guess placeholders — edit to match reality.
-# Note "eIFU Only" (eIFU case) and "eIFU Flag" (hybrid case) are kept as two
-# separate keys; set them to the same key if they are in fact one attribute.
+# - StrykercorpeIFUFlag is a boolean (true=electronic IFU, false=print). Stored
+#   values stringify to "True"/"False". It is a single attribute, so the eIFU
+#   case and the hybrid case both use it.
+# - DefaultUnit is an enum {"Value": <code>, "Display": <label>}; compared on
+#   .Display: "As Needed" (electronic) or "Piece" (print).
 # ---------------------------------------------------------------------------
-ATTR_EIFU_ONLY = "eIFUOnly.Value"        # eIFU case, expected "Yes"
-ATTR_EIFU_FLAG = "eIFUFlag.Value"        # hybrid per-part flag, "Yes"/"No"
-ATTR_DEFAULT_UNIT = "DefaultUnit.Value"  # expected "As Needed" or "Piece"
-ATTR_QUANTITY = "Quantity"               # expected "0"
+ATTR_EIFU_FLAG = "StrykercorpeIFUFlag"
+VAL_EIFU_TRUE = "True"
+VAL_EIFU_FALSE = "False"
 
-VAL_YES = "Yes"
-VAL_NO = "No"
+ATTR_DEFAULT_UNIT = "DefaultUnit.Display"
 VAL_UNIT_AS_NEEDED = "As Needed"
 VAL_UNIT_PIECE = "Piece"
-VAL_QUANTITY_ZERO = "0"
+
+# NOT YET CHECKED — "Quantity = 0" is not a Part attribute; it is the PartUse
+# usage-link quantity (Config PDP --uses--> IFU PDP), which the relationships
+# sync does not currently store. Capture it there to enable this check.
 
 # (attribute key, expected value, human label) tuples per classification.
 EIFU_EXPECTATIONS = [
-    (ATTR_EIFU_ONLY, VAL_YES, "eIFU Only"),
+    (ATTR_EIFU_FLAG, VAL_EIFU_TRUE, "eIFU Flag"),
     (ATTR_DEFAULT_UNIT, VAL_UNIT_AS_NEEDED, "Default Unit"),
-    (ATTR_QUANTITY, VAL_QUANTITY_ZERO, "Quantity"),
 ]
 HYBRID_ELECTRONIC_EXPECTATIONS = [
-    (ATTR_EIFU_FLAG, VAL_YES, "eIFU Flag"),
+    (ATTR_EIFU_FLAG, VAL_EIFU_TRUE, "eIFU Flag"),
     (ATTR_DEFAULT_UNIT, VAL_UNIT_AS_NEEDED, "Default Unit"),
-    (ATTR_QUANTITY, VAL_QUANTITY_ZERO, "Quantity"),
 ]
 HYBRID_PRINT_EXPECTATIONS = [
-    (ATTR_EIFU_FLAG, VAL_NO, "eIFU Flag"),
+    (ATTR_EIFU_FLAG, VAL_EIFU_FALSE, "eIFU Flag"),
     (ATTR_DEFAULT_UNIT, VAL_UNIT_PIECE, "Default Unit"),
 ]
 

@@ -139,9 +139,16 @@ The three logical record types validated by checks are:
 
 | Logical type | Windchill identity |
 |---|---|
-| `Config PDP` | `ProductDefinitionPart`, `ConfigurableModule.Value == "Yes"` |
-| `IFU PDP` | `ProductDefinitionPart`, `ConfigurableModule.Value == "No"` |
+| `Config PDP` | `ProductDefinitionPart`, `ConfigurableModule.Display == "Yes"` |
+| `IFU PDP` | `ProductDefinitionPart`, `ConfigurableModule.Display == "No"` |
 | `IFU Drawing` | `PTC.DocMgmt.IFUDrawing` document, `DocTypeName == "IFU Drawing"` |
+
+Enum attributes come back as `{"Value": <internal code>, "Display": <label>}` — e.g.
+`ConfigurableModule` is `{"Value": "dynamic", "Display": "Yes"}` /
+`{"Value": "standard", "Display": "No"}`, and `DefaultUnit` is
+`{"Value": "as_needed", "Display": "As Needed"}` / `{"Value": "ea", "Display": "Piece"}`.
+Classification and checks compare on `.Display` (the human label). Non-enum fields
+like `Number`, `Name`, `DocTypeName` are plain strings.
 
 ### Folder Sync
 

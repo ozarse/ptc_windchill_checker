@@ -132,6 +132,44 @@ def test_unknown_via_raises(conn, tmp_path):
         run_all_checks(conn, cfg)
 
 
+def test_shipped_attribute_checks_pass_on_real_payload_shape(tmp_path):
+    """Config/IFU PDP attribute checks pass against the real enum payload shape.
+
+    Enum attributes are {"Value": <code>, "Display": <label>}; the checks compare
+    on .Display, so a Config PDP has ConfigurableModule.Display == "Yes".
+    """
+    from pathlib import Path
+
+    conn = get_connection(tmp_path / "t.db")
+    init_db(conn)
+    config = WindchillObject(
+        id="CFG", type_name="Config PDP", windchill_type="PTC.ProdMgmt.ProductDefinitionPart",
+        number="CMF_C00003", name="MEDPOR IFU Options", state="PRODUCTIONRELEASED",
+        revision="AA", last_modified="2024-03-16T20:43:46Z",
+        attributes={"Number": "CMF_C00003", "Name": "MEDPOR IFU Options",
+                    "ConfigurableModule": {"Value": "dynamic", "Display": "Yes"}},
+        synced_at="x",
+    )
+    ifu = WindchillObject(
+        id="IFU", type_name="IFU PDP", windchill_type="PTC.ProdMgmt.ProductDefinitionPart",
+        number="50-0060-EN", name="TMJ IFU EN", state="PRODUCTIONRELEASED",
+        revision="AB", last_modified="2026-04-14T12:28:10Z",
+        attributes={"Number": "50-0060-EN", "Name": "TMJ IFU EN",
+                    "ConfigurableModule": {"Value": "standard", "Display": "No"}},
+        synced_at="x",
+    )
+    upsert_object(conn, config)
+    upsert_object(conn, ifu)
+    conn.commit()
+
+    results = run_all_checks(conn, Path("config/checks.json"),
+                             check_names=["config_pdp_attributes", "ifu_pdp_attributes"])
+    all_rows = [r for rows in results.values() for r in rows]
+    assert all_rows and all(r.passed for r in all_rows), \
+        [r.message for r in all_rows if not r.passed]
+    conn.close()
+
+
 def test_shipped_checks_config_parses():
     from pathlib import Path
     checks = load_check_configs(Path("config/checks.json"))
