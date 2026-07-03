@@ -432,13 +432,19 @@ def pdf_check(ctx):
 @click.option("--check", "check_names", multiple=True, help="Run only these checks. Repeatable.")
 @click.option("--skip-pdf", is_flag=True,
               help="Skip checks marked 'requires_pdf' (use when PDFs aren't downloaded).")
+@click.option("--clear", is_flag=True,
+              help="Delete all existing check_results before running (removes stale/orphan rows).")
 @click.pass_context
-def check(ctx, checks_config, check_names, skip_pdf):
+def check(ctx, checks_config, check_names, skip_pdf, clear):
     """Run attribute validation checks against local data."""
     from oneplm_ingestion.checks import run_all_checks
-    from oneplm_ingestion.db import get_connection
+    from oneplm_ingestion.db import clear_check_results, get_connection
 
     conn = get_connection(ctx.obj["db_path"])
+    if clear:
+        removed = clear_check_results(conn)
+        conn.commit()
+        click.echo(f"Cleared {removed} existing check result(s)")
     if skip_pdf:
         click.echo("Skipping PDF-dependent checks (--skip-pdf)")
     results = run_all_checks(

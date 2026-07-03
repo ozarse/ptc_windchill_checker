@@ -142,6 +142,21 @@ def test_shipped_checks_config_parses():
     assert "PythonCheck" in kinds
 
 
+def test_clear_check_results(conn, tmp_path):
+    from oneplm_ingestion.db import clear_check_results, get_check_results
+
+    cfg = _write_checks(tmp_path, [{
+        "name": "plain", "kind": "attribute", "type": "Config PDP",
+        "assertions": [{"attr": "Number", "operator": "not_empty"}],
+    }])
+    run_all_checks(conn, cfg)
+    assert get_check_results(conn)  # rows exist
+    removed = clear_check_results(conn)
+    conn.commit()
+    assert removed >= 1
+    assert get_check_results(conn) == []
+
+
 def test_skip_pdf_excludes_marked_checks(conn, tmp_path):
     cfg = _write_checks(tmp_path, [
         {"name": "plain", "kind": "attribute", "type": "Config PDP",

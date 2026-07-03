@@ -267,6 +267,12 @@ def _row_to_pdf(row: sqlite3.Row) -> PDFContent:
 # --- Check results ---
 
 
+def clear_check_results(conn: sqlite3.Connection) -> int:
+    """Delete all rows from check_results. Returns the number removed."""
+    cur = conn.execute("DELETE FROM check_results")
+    return cur.rowcount
+
+
 def save_check_results(conn: sqlite3.Connection, results: list[CheckResult]) -> None:
     """Bulk insert check results, replacing previous results for the same check_name."""
     if not results:

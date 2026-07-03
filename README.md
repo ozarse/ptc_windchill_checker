@@ -498,6 +498,9 @@ oneplm check --check config_pdp_attributes --check ifu_pdp_attributes
 # Skip checks that need PDF data (marked "requires_pdf") when PDFs aren't downloaded
 oneplm check --skip-pdf
 
+# Wipe all previous results (removes stale/orphan rows) before running
+oneplm check --clear
+
 # Use a different config file
 oneplm check --checks-config path/to/my_checks.json
 
