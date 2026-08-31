@@ -78,6 +78,7 @@ def test_attribute_when_precondition_skips(conn, tmp_path):
     results = run_all_checks(conn, cfg)["released_only"]
     # Config PDP is not Released -> precondition not met -> passes as SKIP
     assert results[0].passed is True
+    assert results[0].status == "skip"
     assert "SKIP" in results[0].message
 
 
@@ -122,14 +123,114 @@ def test_python_check_dispatch(conn, tmp_path):
     assert "PDF Filenames" in results
 
 
-def test_unknown_via_raises(conn, tmp_path):
+def test_unknown_via_rejected_at_load(conn, tmp_path):
     cfg = _write_checks(tmp_path, [{
         "name": "bad", "kind": "relationship",
         "type": "IFU Drawing", "related_type": "IFU PDP", "via": "bogus",
         "comparisons": [{"source_attr": "Number", "target_attr": "Number", "operator": "equals"}],
     }])
-    with pytest.raises(ValueError, match="Unknown relationship 'via'"):
+    with pytest.raises(ValueError, match="unknown 'via'"):
         run_all_checks(conn, cfg)
+
+
+def test_unknown_operator_rejected_at_load(tmp_path):
+    cfg = _write_checks(tmp_path, [{
+        "name": "typo", "kind": "attribute", "type": "Config PDP",
+        "assertions": [{"attr": "Name", "operator": "equalz", "value": "x"}],
+    }])
+    with pytest.raises(ValueError, match="unknown operator 'equalz'"):
+        load_check_configs(cfg)
+
+
+def test_binary_operator_without_value_rejected_at_load(tmp_path):
+    cfg = _write_checks(tmp_path, [{
+        "name": "no_value", "kind": "attribute", "type": "Config PDP",
+        "assertions": [{"attr": "Name", "operator": "equals"}],
+    }])
+    with pytest.raises(ValueError, match="requires a 'value'"):
+        load_check_configs(cfg)
+
+
+def test_duplicate_check_names_rejected_at_load(tmp_path):
+    entry = {"name": "dup", "kind": "attribute", "type": "Config PDP",
+             "assertions": [{"attr": "Number", "operator": "not_empty"}]}
+    cfg = _write_checks(tmp_path, [entry, dict(entry)])
+    with pytest.raises(ValueError, match="duplicate check name 'dup'"):
+        load_check_configs(cfg)
+
+
+def test_relationship_without_comparisons_or_counts_rejected(tmp_path):
+    cfg = _write_checks(tmp_path, [{
+        "name": "empty_rel", "kind": "relationship",
+        "type": "IFU PDP", "related_type": "Config PDP", "via": "used_by",
+    }])
+    with pytest.raises(ValueError, match="needs 'comparisons' and/or 'min_count'"):
+        load_check_configs(cfg)
+
+
+def test_relationship_min_count_pass(conn, tmp_path):
+    cfg = _write_checks(tmp_path, [{
+        "name": "pdp_used", "kind": "relationship",
+        "type": "IFU PDP", "related_type": "Config PDP", "via": "used_by",
+        "min_count": 1,
+    }])
+    results = run_all_checks(conn, cfg)["pdp_used"]
+    assert len(results) == 1
+    assert results[0].passed is True
+    assert results[0].source_value == "1"
+    assert results[0].target_object_id == "CFG1"
+
+
+def test_relationship_min_count_fail_when_no_links(conn, tmp_path):
+    # The Config PDP has no used_by rows at all -> count 0 -> fail.
+    cfg = _write_checks(tmp_path, [{
+        "name": "cfg_used", "kind": "relationship",
+        "type": "Config PDP", "related_type": "Config PDP", "via": "used_by",
+        "min_count": 1,
+    }])
+    results = run_all_checks(conn, cfg)["cfg_used"]
+    assert len(results) == 1
+    assert results[0].passed is False
+    assert results[0].target_object_id == "MISSING"
+    assert "expected at least 1" in results[0].message
+
+
+def test_relationship_target_value_literal(conn, tmp_path):
+    # Assert directly on the related record's attribute against a literal.
+    cfg = _write_checks(tmp_path, [{
+        "name": "uses_number", "kind": "relationship",
+        "type": "Config PDP", "related_type": "IFU PDP", "via": "uses",
+        "comparisons": [{"target_attr": "Number", "operator": "equals", "target_value": "12345"}],
+    }])
+    results = run_all_checks(conn, cfg)["uses_number"]
+    assert len(results) == 1
+    assert results[0].passed is True
+
+    cfg_bad = _write_checks(tmp_path, [{
+        "name": "uses_number", "kind": "relationship",
+        "type": "Config PDP", "related_type": "IFU PDP", "via": "uses",
+        "comparisons": [{"target_attr": "Number", "operator": "equals", "target_value": "99999"}],
+    }])
+    results = run_all_checks(conn, cfg_bad)["uses_number"]
+    assert results[0].passed is False
+
+
+def test_relationship_unsynced_target_reported(conn, tmp_path):
+    # Replace the IFU PDP's used_by link with one pointing at an object that
+    # was never synced: the failure must name the data gap, not "no related".
+    save_relationships(conn, "PDP1", "used_by", [{"ID": "GHOST", "Number": "G-1"}], "now")
+    conn.commit()
+    cfg = _write_checks(tmp_path, [{
+        "name": "pdp_used", "kind": "relationship",
+        "type": "IFU PDP", "related_type": "Config PDP", "via": "used_by",
+        "on_missing": "fail",
+        "comparisons": [{"source_attr": "Number", "target_attr": "Number", "operator": "equals"}],
+    }])
+    results = run_all_checks(conn, cfg)["pdp_used"]
+    assert len(results) == 1
+    assert results[0].passed is False
+    assert "not in local DB" in results[0].message
+    assert "G-1" in results[0].message
 
 
 def test_shipped_attribute_checks_pass_on_real_payload_shape(tmp_path):

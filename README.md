@@ -294,8 +294,9 @@ Validate a record against the records reached through a Windchill relationship. 
 | `type` | Yes | The source record type. |
 | `related_type` | Yes | The type of the related records to compare against. |
 | `via` | Yes | Relationship to traverse from the source: `describes`, `described_by`, `uses`, or `used_by`. |
-| `on_missing` | No | `fail` (default) records a failure when no related record exists; `skip` ignores it. |
-| `comparisons` | Yes | List of `{ source_attr, target_attr, operator, value?, when? }`. |
+| `on_missing` | No | `fail` (default) records a failure when no related record exists; `skip` ignores it. When the link exists in Windchill but the target was never synced locally, the failure message says so explicitly. |
+| `comparisons` | Yes* | List of `{ source_attr?, target_attr?, operator, value?, target_value?, when? }`. *Optional when `min_count`/`max_count` is set. |
+| `min_count` / `max_count` | No | Bounds on how many related records must exist (e.g. `"min_count": 1` = "at least one related record"). Emits one pass/fail row per source record. |
 
 The relationship directions for the three record types:
 
@@ -328,11 +329,20 @@ Each entry in an `attribute` check's `assertions` or a `relationship` check's `c
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `attr` / `source_attr` | Yes | Attribute to read from the (source) record. Supports dot notation (e.g., `State.Value`). |
+| `attr` / `source_attr` | Yes* | Attribute to read from the (source) record. Supports dot notation (e.g., `State.Value`). *In a relationship comparison, may be omitted when asserting only on the related record via `target_attr` + `target_value`. |
 | `operator` | Yes | The comparison operator. See the operator table below. |
 | `target_attr` | No | (relationship only) Attribute to read from the related record. Required for cross-record comparisons like `equals`. |
-| `value` | No | A literal value to compare against. Required for `matches`, numeric, and date operators. When both `target_attr` and `value` are present, `value` takes precedence. |
-| `when` | No | A precondition evaluated against the source record. If not met, the comparison is skipped (counts as pass). |
+| `value` | No | A literal value to compare against the **source** attribute. Required for `matches`, numeric, and date operators. When both `target_attr` and `value` are present, `value` takes precedence. |
+| `target_value` | No | (relationship only) A literal value to compare against the **related** record's `target_attr` — e.g. `{ "target_attr": "State.Display", "operator": "equals", "target_value": "Released" }` asserts on the related record directly. |
+| `when` | No | A precondition evaluated against the source record. If not met, the comparison is recorded with status `skip` (never counts as a failure). |
+
+Note: attribute values are read as strings — booleans arrive as `"True"`/`"False"`, so
+compare them with `{ "operator": "equals", "value": "True" }`. Enum attributes are
+`{"Value", "Display"}` objects; compare on `.Display` (the human label) per project convention.
+
+Every result row carries a `status` of `pass`, `fail`, or `skip` (in the DB, CSV export,
+and CLI summaries). `checks.json` is validated when loaded — unknown operators, a bad
+`via`, malformed comparisons, or duplicate check names fail fast with a list of problems.
 
 ### Operators
 

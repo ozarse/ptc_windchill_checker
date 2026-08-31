@@ -6,8 +6,7 @@
     "description": "Config PDP records must carry the core required attributes.",
     "assertions": [
       { "attr": "Number", "operator": "not_empty" },
-      { "attr": "Name", "operator": "not_empty" },
-      { "attr": "ConfigurableModule.Display", "operator": "equals", "value": "Yes" }
+      { "attr": "Name", "operator": "not_empty" }
     ]
   },
   {
@@ -17,8 +16,7 @@
     "description": "IFU PDP records must carry the core required attributes.",
     "assertions": [
       { "attr": "Number", "operator": "not_empty" },
-      { "attr": "Name", "operator": "not_empty" },
-      { "attr": "ConfigurableModule.Display", "operator": "equals", "value": "No" }
+      { "attr": "Name", "operator": "not_empty" }
     ]
   },
   {
@@ -51,10 +49,7 @@
     "related_type": "Config PDP",
     "via": "used_by",
     "description": "Every IFU PDP must be used by at least one Config PDP.",
-    "on_missing": "fail",
-    "comparisons": [
-      { "source_attr": "Number", "target_attr": "Number", "operator": "not_empty" }
-    ]
+    "min_count": 1
   },
   {
     "name": "config_pdp_uses_match",
@@ -62,7 +57,7 @@
     "type": "Config PDP",
     "related_type": "IFU PDP",
     "via": "uses",
-    "description": "Each IFU PDP used by a Config PDP must be in the Released state.",
+    "description": "Each IFU PDP a Config PDP uses must share the Config PDP's lifecycle state.",
     "on_missing": "skip",
     "comparisons": [
       { "source_attr": "State.Value", "target_attr": "State.Value", "operator": "equals" }

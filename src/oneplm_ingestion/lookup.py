@@ -146,6 +146,6 @@ def format_lookup_result(result: dict) -> str:
             lines.append(f"  {ctx.get('Name', ctx.get('ID', '?'))}")
 
     if not any(result.values()):
-        lines.append(f"No documents or parts found with number matching the query.")
+        lines.append("No documents or parts found with number matching the query.")
 
     return "\n".join(lines)

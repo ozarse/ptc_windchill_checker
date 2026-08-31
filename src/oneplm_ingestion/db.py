@@ -50,6 +50,7 @@ CREATE TABLE IF NOT EXISTS check_results (
     source_value     TEXT,
     target_value     TEXT,
     passed           INTEGER NOT NULL,
+    status           TEXT,
     message          TEXT,
     checked_at       TEXT NOT NULL
 );
@@ -133,6 +134,7 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
     for stmt in (
         "ALTER TABLE objects ADD COLUMN folder_id TEXT REFERENCES folders(id)",
         "ALTER TABLE relationships ADD COLUMN target_number TEXT",
+        "ALTER TABLE check_results ADD COLUMN status TEXT",
     ):
         try:
             conn.execute(stmt)
@@ -299,13 +301,13 @@ def save_check_results(conn: sqlite3.Connection, results: list[CheckResult]) -> 
     conn.executemany(
         """INSERT INTO check_results
            (check_name, source_object_id, target_object_id, source_attr, target_attr,
-            source_value, target_value, passed, message, checked_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            source_value, target_value, passed, status, message, checked_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         [
             (
                 r.check_name, r.source_object_id, r.target_object_id,
                 r.source_attr, r.target_attr, r.source_value, r.target_value,
-                int(r.passed), r.message, r.checked_at,
+                int(r.passed), r.status, r.message, r.checked_at,
             )
             for r in results
         ],
@@ -403,6 +405,18 @@ def get_relationship_target_ids(
         (source_id, rel_type),
     ).fetchall()
     return [row["target_id"] for row in rows]
+
+
+def get_relationship_targets(
+    conn: sqlite3.Connection, source_id: str, rel_type: str
+) -> list[tuple[str, str | None]]:
+    """Forward traversal returning ``(target_id, target_number)`` pairs."""
+    rows = conn.execute(
+        "SELECT target_id, target_number FROM relationships"
+        " WHERE source_id = ? AND rel_type = ? AND target_id IS NOT NULL",
+        (source_id, rel_type),
+    ).fetchall()
+    return [(row["target_id"], row["target_number"]) for row in rows]
 
 
 def get_relationship_source_ids(
@@ -531,6 +545,7 @@ def get_check_results(
             source_value=row["source_value"],
             target_value=row["target_value"],
             passed=bool(row["passed"]),
+            status=row["status"] or "",  # pre-migration rows: derived in __post_init__
             message=row["message"],
             checked_at=row["checked_at"],
         )

@@ -294,6 +294,7 @@ def run_pdf_language_checks(conn) -> list[CheckResult]:
                     source_value=code,
                     target_value=target_value,
                     passed=passed,
+                    status="skip" if message.startswith("SKIP") else "",
                     message=message,
                     checked_at=now,
                 )

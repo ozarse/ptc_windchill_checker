@@ -90,16 +90,25 @@ def _resolve_described_by(client, part_id: str) -> list[dict]:
 
 
 def _resolve_uses(client, part_id: str) -> list[dict]:
-    """Follow each PartUse link to the child part it uses."""
+    """Follow each PartUse link to the child part it uses.
+
+    The PartUse link itself carries usage attributes (Quantity, Unit, …) that
+    the child part does not. It is preserved on each returned item under
+    ``UsesLink`` so checks can read e.g. ``UsesLink.Quantity`` from the stored
+    ``attributes_json``.
+    """
     parts = []
     for link in client.get_part_uses(part_id):
         use_id = link.get("ID")
         if not use_id:
             continue
         try:
-            parts.append(client.get_uses_part(part_id, use_id))
+            part = dict(client.get_uses_part(part_id, use_id))
         except Exception as exc:
             log.warning("  Failed to follow uses link %s on %s: %s", use_id, part_id, exc)
+            continue
+        part["UsesLink"] = {k: v for k, v in link.items() if not k.startswith("@")}
+        parts.append(part)
     return parts
 
 

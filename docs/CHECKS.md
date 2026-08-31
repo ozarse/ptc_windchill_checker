@@ -10,7 +10,13 @@ There are three kinds:
 - **attribute** — validates one record's own fields (declared in JSON).
 - **relationship** — compares a record against related records reached through a
   Windchill link, joined offline from the `relationships` table (declared in JSON).
+  Supports `min_count`/`max_count` cardinality bounds and `target_value` literal
+  assertions on the related record — see the README field reference.
 - **python** — a registered function for logic the JSON can't express.
+
+Every result row carries a `status` of `pass`, `fail`, or `skip`; skipped rows
+(unmet `when` preconditions, missing prerequisite data) never count as failures
+and are reported separately in summaries and exports.
 
 **Legend:** ✅ complete · 🟡 works but has open items to confirm · ⬜ planned
 
@@ -25,7 +31,7 @@ There are three kinds:
 | 3 | `ifu_drawing_attributes` | attribute | IFU Drawing | ✅ |
 | 4 | `ifu_drawing_matches_ifu_pdp` | relationship | IFU Drawing → IFU PDP | ✅ |
 | 5 | `ifu_pdp_used_by_config_pdp` | relationship | IFU PDP → Config PDP | ✅ |
-| 6 | `config_pdp_uses_match` | relationship | Config PDP → IFU PDP | ✅ |
+| 6 | `config_pdp_uses_match` | relationship | Config PDP → IFU PDP | 🟡 |
 | 7 | `ifu_drawing_pdf_filename` | python | IFU Drawing (PDF) | ✅ |
 | 8 | `config_pdp_ifu_classification` | python | Config PDP + IFU PDPs | 🟡 |
 | 9 | `ifu_drawing_pdf_language` | python | IFU Drawing (PDF) | 🟡 |
@@ -53,13 +59,19 @@ depends on the `pdfs` table so it participates in `--skip-pdf`.
 Config PDP records carry the core required attributes.
 - `Number` not empty
 - `Name` not empty
-- `ApprovalDate` not empty **when** `State.Value == Released`
+
+> The former `ConfigurableModule.Display == "Yes"` assertion was removed as a
+> tautology: type classification during sync already guarantees it for every
+> record stored as `Config PDP`. Likewise the once-documented `ApprovalDate`
+> assertion was deliberately dropped in commit `b14717e`.
 
 ### 2. `ifu_pdp_attributes` ✅
 IFU PDP records carry the core required attributes.
 - `Number` not empty
 - `Name` not empty
-- `ConfigurableModule.Value == "No"`
+
+> The former `ConfigurableModule.Display == "No"` assertion was removed as a
+> tautology (see check 1).
 
 ### 3. `ifu_drawing_attributes` ✅
 IFU Drawing documents are the correct type and identified.
@@ -77,16 +89,30 @@ An IFU Drawing and the IFU PDP it **describes** must share identity.
 - `on_missing: fail` (a drawing with no linked IFU PDP fails)
 
 ### 5. `ifu_pdp_used_by_config_pdp` ✅
-Every IFU PDP is **used by** a Config PDP.
+Every IFU PDP is **used by** at least one Config PDP.
 - Traversal: IFU PDP → `used_by` → Config PDP
-- Related Config PDP `Number` not empty
-- `on_missing: fail`
+- `min_count: 1` — one pass/fail row per IFU PDP counting its related Config PDPs
 
-### 6. `config_pdp_uses_match` ✅
-Each IFU PDP a Config PDP **uses** shares its lifecycle state.
+### 6. `config_pdp_uses_match` 🟡
+Each IFU PDP a Config PDP **uses** shares the Config PDP's lifecycle state.
 - Traversal: Config PDP → `uses` → IFU PDP
 - `State.Value` equal
 - `on_missing: skip`
+
+> 🟡 **Open — confirm the intended rule.** An earlier description said the IFU
+> PDP "must be in the Released state", but the implementation has always
+> compared source and target states for *equality* (two "In Work" records
+> pass). If the absolute rule is intended, replace the comparison with
+> `{ "target_attr": "State.Display", "operator": "equals", "target_value": "<released label>" }`
+> once the released-state label is confirmed (sample payloads show
+> `State.Value == "PRODUCTIONRELEASED"`).
+
+**Note on `used_by` data:** `sync relationships` fetches `used_by` for **every**
+part, Config PDPs included — the parents that use each Config PDP are stored in
+the `relationships` table with their real ID/Number. No check consumes that
+direction yet; relationship checks can only see related records whose type is
+also synced into `objects`, so a check over Config PDP parents would first need
+those parent types added to `config/types.json` and synced.
 
 ---
 
@@ -132,10 +158,11 @@ attribute checks pass.
 > 🟡 **Open — the "Quantity = 0" check is not implemented.** The eIFU flag and
 > DefaultUnit are confirmed from the sample payloads and active. `Quantity` is
 > **not a Part attribute** — it is the PartUse usage-link quantity
-> (Config PDP `uses` IFU PDP), which `sync relationships` does not currently
-> store (it resolves the link straight to the child part). Enabling it requires
-> capturing the PartUse `Quantity` during relationship sync and pairing it to
-> each IFU PDP in this check.
+> (Config PDP `uses` IFU PDP). `sync relationships` now preserves the PartUse
+> link on each stored `uses` row under `UsesLink` in `attributes_json`
+> (re-run `oneplm sync relationships` to populate it), so the data is
+> available at `UsesLink.Quantity`; what remains is confirming the expected
+> quantity rule per classification and wiring it into this check.
 
 ### 9. `ifu_drawing_pdf_language` 🟡 · `requires_pdf`
 Source: [`content_checks.py`](../src/oneplm_ingestion/content_checks.py) ·

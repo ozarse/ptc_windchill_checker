@@ -38,7 +38,13 @@ class PDFContent:
 
 @dataclass
 class CheckResult:
-    """Result of a single attribute comparison check."""
+    """Result of a single attribute comparison check.
+
+    ``status`` is "pass", "fail", or "skip". Skipped rows (unmet preconditions,
+    missing prerequisite data) keep ``passed=True`` so they never count as
+    failures, but carry status "skip" so summaries and exports can report them
+    separately.
+    """
 
     check_name: str
     source_object_id: str
@@ -50,7 +56,12 @@ class CheckResult:
     passed: bool
     message: str
     checked_at: str = ""
+    status: str = ""
     id: int | None = None
+
+    def __post_init__(self) -> None:
+        if not self.status:
+            self.status = "pass" if self.passed else "fail"
 
 
 @dataclass
@@ -103,12 +114,21 @@ class Assertion:
 
 @dataclass
 class RelationshipComparison:
-    """Compares a source record's attribute against a related record's attribute."""
+    """One comparison within a relationship check. Three forms:
 
-    source_attr: str
+    - ``source_attr`` vs ``target_attr`` — compare the source record's attribute
+      against the related record's attribute.
+    - ``source_attr`` vs ``value`` — compare the source record's attribute
+      against a literal.
+    - ``target_attr`` vs ``target_value`` — assert directly on the related
+      record's attribute against a literal (``source_attr`` may be omitted).
+    """
+
+    source_attr: str | None = None
     target_attr: str | None = None
     operator: str = "equals"
     value: str | None = None
+    target_value: str | None = None
     when: WhenCondition | None = None
 
 
@@ -131,6 +151,8 @@ class RelationshipCheck:
     ``via`` names the relationship traversed from the source ``type`` to the
     ``related_type`` (one of: describes, described_by, uses, used_by).
     ``on_missing`` is "fail" or "skip" when no related record is found.
+    ``min_count`` / ``max_count`` optionally bound how many related records must
+    exist (e.g. ``min_count: 1`` expresses "at least one related record").
     """
 
     name: str
@@ -140,6 +162,8 @@ class RelationshipCheck:
     description: str = ""
     comparisons: list[RelationshipComparison] = field(default_factory=list)
     on_missing: str = "fail"
+    min_count: int | None = None
+    max_count: int | None = None
     kind: str = "relationship"
     requires_pdf: bool = False  # Reads PDF data; excluded by `check --skip-pdf`
 

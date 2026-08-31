@@ -23,7 +23,7 @@ from oneplm_ingestion.db import (
     get_object_by_id,
     get_objects_by_type,
     get_relationship_source_ids,
-    get_relationship_target_ids,
+    get_relationship_targets,
     save_check_results,
 )
 from oneplm_ingestion.models import (
@@ -35,7 +35,13 @@ from oneplm_ingestion.models import (
     RelationshipComparison,
     WhenCondition,
 )
-from oneplm_ingestion.operators import compare, evaluate_when, get_attr_value
+from oneplm_ingestion.operators import (
+    UNARY_OPERATORS,
+    VALID_OPERATORS,
+    compare,
+    evaluate_when,
+    get_attr_value,
+)
 from oneplm_ingestion.registry import get_check_function
 
 log = logging.getLogger(__name__)
@@ -58,14 +64,76 @@ def _parse_when(raw: dict | None) -> WhenCondition | None:
     return WhenCondition(**raw) if raw else None
 
 
+def _validate_operator(operator: str, where: str, errors: list[str]) -> None:
+    if operator not in VALID_OPERATORS:
+        errors.append(f"{where}: unknown operator '{operator}' (expected one of {sorted(VALID_OPERATORS)})")
+
+
+def _validate_when(when: WhenCondition | None, where: str, errors: list[str]) -> None:
+    if when is not None:
+        _validate_operator(when.operator, f"{where} 'when'", errors)
+
+
+def _validate_assertion(a: Assertion, where: str, errors: list[str]) -> None:
+    _validate_operator(a.operator, where, errors)
+    if a.operator in VALID_OPERATORS and a.operator not in UNARY_OPERATORS and a.value is None:
+        errors.append(f"{where}: operator '{a.operator}' requires a 'value'")
+    _validate_when(a.when, where, errors)
+
+
+def _validate_comparison(c: RelationshipComparison, where: str, errors: list[str]) -> None:
+    _validate_operator(c.operator, where, errors)
+    if c.source_attr is None and c.target_attr is None:
+        errors.append(f"{where}: needs 'source_attr' and/or 'target_attr'")
+    if c.target_value is not None and c.target_attr is None:
+        errors.append(f"{where}: 'target_value' requires a 'target_attr'")
+    if (
+        c.operator in VALID_OPERATORS
+        and c.operator not in UNARY_OPERATORS
+        and c.target_attr is None
+        and c.value is None
+    ):
+        errors.append(f"{where}: operator '{c.operator}' needs a 'target_attr' or a literal 'value'")
+    _validate_when(c.when, where, errors)
+
+
+def _validate_relationship_check(check: RelationshipCheck, where: str, errors: list[str]) -> None:
+    if check.via not in _VIA:
+        errors.append(f"{where}: unknown 'via' '{check.via}' (expected one of {sorted(_VIA)})")
+    if check.on_missing not in ("fail", "skip"):
+        errors.append(f"{where}: 'on_missing' must be 'fail' or 'skip', got '{check.on_missing}'")
+    for bound_name in ("min_count", "max_count"):
+        bound = getattr(check, bound_name)
+        if bound is not None and (not isinstance(bound, int) or bound < 0):
+            errors.append(f"{where}: '{bound_name}' must be a non-negative integer")
+    if (
+        isinstance(check.min_count, int)
+        and isinstance(check.max_count, int)
+        and check.min_count > check.max_count
+    ):
+        errors.append(f"{where}: 'min_count' ({check.min_count}) exceeds 'max_count' ({check.max_count})")
+    if not check.comparisons and check.min_count is None and check.max_count is None:
+        errors.append(f"{where}: needs 'comparisons' and/or 'min_count'/'max_count'")
+    for i, comp in enumerate(check.comparisons):
+        _validate_comparison(comp, f"{where} comparison {i + 1}", errors)
+
+
 def load_check_configs(config_path: Path) -> list[Check]:
-    """Load checks.json and parse each entry into its kind-specific dataclass."""
+    """Load checks.json and parse each entry into its kind-specific dataclass.
+
+    Raises ValueError listing every problem found (unknown operators, bad 'via',
+    malformed comparisons, duplicate names) so config typos surface immediately
+    instead of as per-record failures at run time.
+    """
     with open(config_path) as f:
         raw = json.load(f)
 
     checks: list[Check] = []
+    errors: list[str] = []
     for entry in raw:
         kind = entry.get("kind", "attribute")
+        name = entry.get("name", "<unnamed>")
+        where = f"check '{name}'"
         requires_pdf = entry.get("requires_pdf", False)
         if kind == "attribute":
             assertions = [
@@ -77,6 +145,8 @@ def load_check_configs(config_path: Path) -> list[Check]:
                 )
                 for a in entry.get("assertions", [])
             ]
+            for i, assertion in enumerate(assertions):
+                _validate_assertion(assertion, f"{where} assertion {i + 1}", errors)
             checks.append(AttributeCheck(
                 name=entry["name"],
                 type=entry["type"],
@@ -87,15 +157,16 @@ def load_check_configs(config_path: Path) -> list[Check]:
         elif kind == "relationship":
             comparisons = [
                 RelationshipComparison(
-                    source_attr=c["source_attr"],
+                    source_attr=c.get("source_attr"),
                     target_attr=c.get("target_attr"),
                     operator=c.get("operator", "equals"),
                     value=c.get("value"),
+                    target_value=c.get("target_value"),
                     when=_parse_when(c.get("when")),
                 )
                 for c in entry.get("comparisons", [])
             ]
-            checks.append(RelationshipCheck(
+            check = RelationshipCheck(
                 name=entry["name"],
                 type=entry["type"],
                 related_type=entry["related_type"],
@@ -103,8 +174,12 @@ def load_check_configs(config_path: Path) -> list[Check]:
                 description=entry.get("description", ""),
                 comparisons=comparisons,
                 on_missing=entry.get("on_missing", "fail"),
+                min_count=entry.get("min_count"),
+                max_count=entry.get("max_count"),
                 requires_pdf=requires_pdf,
-            ))
+            )
+            _validate_relationship_check(check, where, errors)
+            checks.append(check)
         elif kind == "python":
             checks.append(PythonCheck(
                 name=entry["name"],
@@ -113,7 +188,18 @@ def load_check_configs(config_path: Path) -> list[Check]:
                 requires_pdf=requires_pdf,
             ))
         else:
-            raise ValueError(f"Unknown check kind '{kind}' in check '{entry.get('name')}'")
+            errors.append(f"{where}: unknown kind '{kind}'")
+
+    seen: set[str] = set()
+    for chk in checks:
+        if chk.name in seen:
+            errors.append(f"duplicate check name '{chk.name}'")
+        seen.add(chk.name)
+
+    if errors:
+        raise ValueError(
+            f"Invalid checks config {config_path}:\n  " + "\n  ".join(errors)
+        )
     return checks
 
 
@@ -134,6 +220,7 @@ def run_attribute_check(conn, check: AttributeCheck) -> list[CheckResult]:
                     source_value=get_attr_value(obj.attributes, assertion.attr),
                     target_value=assertion.value,
                     passed=True,
+                    status="skip",
                     message=(
                         f"SKIP: precondition not met "
                         f"({assertion.when.attr} {assertion.when.operator} {assertion.when.value})"
@@ -159,24 +246,103 @@ def run_attribute_check(conn, check: AttributeCheck) -> list[CheckResult]:
     return results
 
 
-def _related_objects(conn, source_id: str, via: str, related_type: str) -> list:
-    """Resolve related records of ``related_type`` reachable from ``source_id``."""
+def _related_objects(conn, source_id: str, via: str, related_type: str) -> tuple[list, list[str], int]:
+    """Resolve related records of ``related_type`` reachable from ``source_id``.
+
+    Returns ``(related, unsynced, other_type)``:
+      - ``related`` — related objects found in the DB with the expected type.
+      - ``unsynced`` — labels (number or ID) of linked targets NOT in the local
+        DB, so "no link in Windchill" can be told apart from "link exists but
+        the target was never synced".
+      - ``other_type`` — count of linked objects in the DB of a different type
+        (legitimately excluded, e.g. non-IFU children under a Config PDP).
+    """
     if via not in _VIA:
         raise ValueError(
             f"Unknown relationship 'via': '{via}'. Expected one of {sorted(_VIA)}"
         )
     rel_type, direction = _VIA[via]
     if direction == "forward":
-        ids = get_relationship_target_ids(conn, source_id, rel_type)
+        pairs = get_relationship_targets(conn, source_id, rel_type)
     else:
-        ids = get_relationship_source_ids(conn, source_id, rel_type)
+        pairs = [(sid, None) for sid in get_relationship_source_ids(conn, source_id, rel_type)]
 
-    related = []
-    for rid in ids:
+    related, unsynced, other_type = [], [], 0
+    for rid, number in pairs:
         obj = get_object_by_id(conn, rid)
-        if obj is not None and obj.type_name == related_type:
+        if obj is None:
+            unsynced.append(number or rid)
+        elif obj.type_name == related_type:
             related.append(obj)
-    return related
+        else:
+            other_type += 1
+    return related, unsynced, other_type
+
+
+def _unsynced_note(unsynced: list[str], max_listed: int = 5) -> str:
+    """Human-readable note about linked targets missing from the local DB."""
+    if not unsynced:
+        return ""
+    listed = ", ".join(unsynced[:max_listed])
+    more = f" (+{len(unsynced) - max_listed} more)" if len(unsynced) > max_listed else ""
+    return f"; {len(unsynced)} linked target(s) not in local DB: {listed}{more}"
+
+
+def _cardinality_result(check: RelationshipCheck, source, related: list, unsynced: list[str], now: str) -> CheckResult:
+    """Build the one-per-source result for a min_count/max_count constraint."""
+    count = len(related)
+    passed = (check.min_count is None or count >= check.min_count) and (
+        check.max_count is None or count <= check.max_count
+    )
+    if check.min_count is not None and check.max_count is not None:
+        expected = f"between {check.min_count} and {check.max_count}"
+    elif check.min_count is not None:
+        expected = f"at least {check.min_count}"
+    else:
+        expected = f"at most {check.max_count}"
+    return CheckResult(
+        check_name=check.name,
+        source_object_id=source.id,
+        target_object_id=related[0].id if count == 1 else ("MISSING" if count == 0 else "MULTIPLE"),
+        source_attr="count",
+        target_attr="",
+        source_value=str(count),
+        target_value=expected,
+        passed=passed,
+        message=(
+            f"{'PASS' if passed else 'FAIL'}: {count} related {check.related_type} "
+            f"via '{check.via}' for {source.number or source.id} (expected {expected})"
+            + _unsynced_note(unsynced)
+        ),
+        checked_at=now,
+    )
+
+
+def _comparison_result(check: RelationshipCheck, source, target, comp, now: str) -> CheckResult:
+    """Evaluate one comparison between a source record and one related record."""
+    src_val = get_attr_value(source.attributes, comp.source_attr) if comp.source_attr else None
+    tgt_val = get_attr_value(target.attributes, comp.target_attr) if comp.target_attr else None
+
+    if comp.target_value is not None:
+        # Assert directly on the related record's attribute against a literal.
+        passed, msg = compare(tgt_val, None, comp.operator, literal_value=comp.target_value)
+    elif comp.source_attr and comp.target_attr and comp.value is None:
+        passed, msg = compare(src_val, tgt_val, comp.operator)
+    else:
+        passed, msg = compare(src_val if comp.source_attr else tgt_val, None,
+                              comp.operator, literal_value=comp.value)
+    return CheckResult(
+        check_name=check.name,
+        source_object_id=source.id,
+        target_object_id=target.id,
+        source_attr=comp.source_attr or "",
+        target_attr=comp.target_attr or "",
+        source_value=src_val,
+        target_value=tgt_val if comp.target_attr else comp.value,
+        passed=passed,
+        message=msg,
+        checked_at=now,
+    )
 
 
 def run_relationship_check(conn, check: RelationshipCheck) -> list[CheckResult]:
@@ -185,25 +351,41 @@ def run_relationship_check(conn, check: RelationshipCheck) -> list[CheckResult]:
     results: list[CheckResult] = []
 
     for source in get_objects_by_type(conn, check.type):
-        related = _related_objects(conn, source.id, check.via, check.related_type)
+        related, unsynced, _ = _related_objects(conn, source.id, check.via, check.related_type)
+
+        if check.min_count is not None or check.max_count is not None:
+            results.append(_cardinality_result(check, source, related, unsynced, now))
 
         if not related:
             if check.on_missing == "skip":
                 continue
+            if unsynced:
+                # The link exists in Windchill; our local DB just lacks the target.
+                # Report a data gap rather than a misleading "no related record".
+                missing_msg = (
+                    f"FAIL: related {check.related_type} via '{check.via}' for "
+                    f"{source.number or source.id} not synced locally"
+                    + _unsynced_note(unsynced)
+                )
+            else:
+                missing_msg = (
+                    f"No related {check.related_type} found via '{check.via}' "
+                    f"for {source.number or source.id}"
+                )
             for comp in check.comparisons:
                 results.append(CheckResult(
                     check_name=check.name,
                     source_object_id=source.id,
                     target_object_id="MISSING",
-                    source_attr=comp.source_attr,
+                    source_attr=comp.source_attr or "",
                     target_attr=comp.target_attr or "",
-                    source_value=get_attr_value(source.attributes, comp.source_attr),
+                    source_value=(
+                        get_attr_value(source.attributes, comp.source_attr)
+                        if comp.source_attr else None
+                    ),
                     target_value=None,
                     passed=False,
-                    message=(
-                        f"No related {check.related_type} found via '{check.via}' "
-                        f"for {source.number or source.id}"
-                    ),
+                    message=missing_msg,
                     checked_at=now,
                 ))
             continue
@@ -215,11 +397,15 @@ def run_relationship_check(conn, check: RelationshipCheck) -> list[CheckResult]:
                         check_name=check.name,
                         source_object_id=source.id,
                         target_object_id=target.id,
-                        source_attr=comp.source_attr,
+                        source_attr=comp.source_attr or "",
                         target_attr=comp.target_attr or "",
-                        source_value=get_attr_value(source.attributes, comp.source_attr),
+                        source_value=(
+                            get_attr_value(source.attributes, comp.source_attr)
+                            if comp.source_attr else None
+                        ),
                         target_value=None,
                         passed=True,
+                        status="skip",
                         message=(
                             f"SKIP: precondition not met "
                             f"({comp.when.attr} {comp.when.operator} {comp.when.value})"
@@ -227,25 +413,7 @@ def run_relationship_check(conn, check: RelationshipCheck) -> list[CheckResult]:
                         checked_at=now,
                     ))
                     continue
-
-                src_val = get_attr_value(source.attributes, comp.source_attr)
-                tgt_val = (
-                    get_attr_value(target.attributes, comp.target_attr)
-                    if comp.target_attr else None
-                )
-                passed, msg = compare(src_val, tgt_val, comp.operator, literal_value=comp.value)
-                results.append(CheckResult(
-                    check_name=check.name,
-                    source_object_id=source.id,
-                    target_object_id=target.id,
-                    source_attr=comp.source_attr,
-                    target_attr=comp.target_attr or "",
-                    source_value=src_val,
-                    target_value=tgt_val if comp.target_attr else comp.value,
-                    passed=passed,
-                    message=msg,
-                    checked_at=now,
-                ))
+                results.append(_comparison_result(check, source, target, comp, now))
     return results
 
 
@@ -301,9 +469,10 @@ def run_all_checks(
         save_check_results(conn, results)
         all_results[chk.name] = results
 
-        passed = sum(1 for r in results if r.passed)
-        failed = sum(1 for r in results if not r.passed)
-        log.info("  %s: %d passed, %d failed", chk.name, passed, failed)
+        passed = sum(1 for r in results if r.status == "pass")
+        failed = sum(1 for r in results if r.status == "fail")
+        skipped = sum(1 for r in results if r.status == "skip")
+        log.info("  %s: %d passed, %d failed, %d skipped", chk.name, passed, failed, skipped)
 
     conn.commit()
     return all_results

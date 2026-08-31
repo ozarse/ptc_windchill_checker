@@ -66,7 +66,7 @@ def export_check_results(
     fieldnames = [
         "check_name", "source_object_id", "target_object_id",
         "source_attr", "target_attr", "source_value", "target_value",
-        "passed", "message", "checked_at",
+        "passed", "status", "message", "checked_at",
     ]
 
     with open(output_path, "w", newline="", encoding="utf-8") as f:
@@ -82,6 +82,7 @@ def export_check_results(
                 "source_value": r.source_value,
                 "target_value": r.target_value,
                 "passed": r.passed,
+                "status": r.status,
                 "message": r.message,
                 "checked_at": r.checked_at,
             })

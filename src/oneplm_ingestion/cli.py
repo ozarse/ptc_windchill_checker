@@ -85,14 +85,18 @@ def status(ctx):
 
     check_rows = conn.execute(
         """SELECT check_name, COUNT(*) as total,
-                  SUM(CASE WHEN passed = 1 THEN 1 ELSE 0 END) as passed,
-                  SUM(CASE WHEN passed = 0 THEN 1 ELSE 0 END) as failed
+                  SUM(CASE WHEN passed = 1 AND COALESCE(status, '') != 'skip' THEN 1 ELSE 0 END) as passed,
+                  SUM(CASE WHEN passed = 0 THEN 1 ELSE 0 END) as failed,
+                  SUM(CASE WHEN COALESCE(status, '') = 'skip' THEN 1 ELSE 0 END) as skipped
            FROM check_results GROUP BY check_name"""
     ).fetchall()
     if check_rows:
         click.echo("\nCheck results:")
         for row in check_rows:
-            click.echo(f"  {row['check_name']}: {row['passed']} passed, {row['failed']} failed")
+            line = f"  {row['check_name']}: {row['passed']} passed, {row['failed']} failed"
+            if row["skipped"]:
+                line += f", {row['skipped']} skipped"
+            click.echo(line)
 
     conn.close()
 
@@ -506,10 +510,14 @@ def check(ctx, checks_config, check_names, skip_pdf, clear):
         skip_pdf=skip_pdf,
     )
     for name, checks in results.items():
-        passed = sum(1 for r in checks if r.passed)
-        failed = sum(1 for r in checks if not r.passed)
+        passed = sum(1 for r in checks if r.status == "pass")
+        failed = sum(1 for r in checks if r.status == "fail")
+        skipped = sum(1 for r in checks if r.status == "skip")
         icon = "PASS" if failed == 0 else "FAIL"
-        click.echo(f"  [{icon}] {name}: {passed} passed, {failed} failed")
+        line = f"  [{icon}] {name}: {passed} passed, {failed} failed"
+        if skipped:
+            line += f", {skipped} skipped"
+        click.echo(line)
     conn.close()
 
 
