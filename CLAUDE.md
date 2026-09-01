@@ -20,6 +20,7 @@ src/oneplm_ingestion/   # All source modules
   relationships.py      # Fetches and stores per-object relationships (attachments, etc.)
   pdf.py                # PDF download and docling text extraction
   checks.py             # Loads checks.json, runs comparisons, saves results
+  excel_compare.py      # Published-products export vs Windchill where-used comparison
   export.py             # CSV export for objects and check results
   lookup.py             # Interactive lookup by number, follows relationships
   models.py             # Dataclasses: WindchillObject, Folder, PDFContent, CheckResult
@@ -175,6 +176,7 @@ Checks are defined declaratively in [config/checks.json](config/checks.json) and
 - **`attribute`** — validates attributes of individual records of one `type`. Carries a list of `assertions`, each an `attr` + `operator` (+ optional `value`, + optional `when`).
 - **`relationship`** — validates a record against the records reached through a Windchill relationship. Names a source `type`, a `related_type`, and a `via` (one of `describes`, `described_by`, `uses`, `used_by`), then runs `comparisons` between source and related attributes (or against literals: `value` for the source attr, `target_value` for the related record's attr). `min_count`/`max_count` bound how many related records must exist. `on_missing` (`fail` | `skip`) controls behaviour when no related record exists; a link whose target isn't synced locally is reported distinctly from a missing link.
 - **`python`** — delegates to a function registered in [registry.py](src/oneplm_ingestion/registry.py) via `@register_check("<name>")`, referenced by `function`. The escape hatch for logic that does not fit the declarative forms.
+- **`excel_compare`** — compares the products that use Config PDPs (`used_by` targets; not synced as objects) against an external .xlsx export ([excel_compare.py](src/oneplm_ingestion/excel_compare.py)). Declares the file path, product/IFU column headers, and separator; missing file → skip row, not a failure. Reads the file at check time via a deferred `openpyxl` import.
 
 The shared operator set lives in [operators.py](src/oneplm_ingestion/operators.py): `equals`, `not_equals`, `contains`, `not_contains`, `not_empty`, `is_empty`, `matches` (regex), `greater_than`, `less_than`, `greater_equal`, `less_equal`, `before`, `after`. Assertions and comparisons both support an optional `when` precondition evaluated against the source record.
 

@@ -13,6 +13,8 @@ There are three kinds:
   Supports `min_count`/`max_count` cardinality bounds and `target_value` literal
   assertions on the related record — see the README field reference.
 - **python** — a registered function for logic the JSON can't express.
+- **excel_compare** — compares Windchill "where used" products against an
+  external Excel export (declared in JSON; reads the .xlsx at check time).
 
 Every result row carries a `status` of `pass`, `fail`, or `skip`; skipped rows
 (unmet `when` preconditions, missing prerequisite data) never count as failures
@@ -36,6 +38,7 @@ and are reported separately in summaries and exports.
 | 8 | `config_pdp_ifu_classification` | python | Config PDP + IFU PDPs | 🟡 |
 | 9 | `ifu_drawing_pdf_language` | python | IFU Drawing (PDF) | 🟡 |
 | 10 | `previous_versions_not_in_concept` | python | All objects (version history) | 🟡 |
+| 11 | `published_products_match` | excel_compare | Config PDP products ↔ published export | 🟡 |
 
 **Data prerequisites**
 
@@ -45,6 +48,7 @@ and are reported separately in summaries and exports.
 | PDF filename / language checks (7, 9) | `oneplm pdf download` (filename needs `--metadata-only` minimum) |
 | Last-page portion of language check (9) | `oneplm pdf extract` |
 | Version check (10) | `oneplm sync versions` |
+| Published-products check (11) | `oneplm sync relationships` **and** the publishing website's bulk export saved to `data/published_products.xlsx` |
 
 Checks that read PDF data are marked `"requires_pdf": true` in `config/checks.json`
 (currently 7 and 9). Run `oneplm check --skip-pdf` to exclude them when PDFs
@@ -204,6 +208,45 @@ check runs offline. A version is judged "concept" if its `State.Value` **or**
 > the real lifecycle state value(s)/label(s) for the concept phase in your
 > "Stryker Three Phase Development" lifecycle (e.g. the `State.Value` seen on a
 > concept-phase version).
+
+---
+
+## Excel-compare checks
+
+### 11. `published_products_match` 🟡
+Source: [`excel_compare.py`](../src/oneplm_ingestion/excel_compare.py) ·
+declared in `config/checks.json` (`kind: excel_compare`)
+
+Compares the products that use Config PDPs against the bulk export from the
+IFU publishing website. The Windchill side is built entirely from data already
+synced: products are the `used_by` targets of each Config PDP (identified by
+`target_number` — they do **not** need to be synced as objects), and each
+product's expected IFU set is the union of the full, language-suffixed IFU PDP
+numbers its Config PDPs `use`.
+
+The export is read at check time from `data/published_products.xlsx`
+(configurable via `file`): one row per product, product number in
+`Reforcatalognumber`, IFU PDP numbers in `Product groups` separated by `|`.
+A product spread over several rows gets its IFU sets merged.
+
+Three validations, all in one result set:
+
+| Case | Result |
+|---|---|
+| Windchill product absent from the export | FAIL, names the Config PDP(s) it came from |
+| Product in both, IFU sets differ | FAIL, lists "in Windchill but not published" and "published but not in Windchill" numbers |
+| Export product no Config PDP is used by | FAIL (orphan in the published list) |
+
+If the export file is missing, or no `used_by` relationships are stored, the
+check emits a single `skip` row saying what to do — it never fails for absent
+prerequisites.
+
+> 🟡 **Open — verify against the first real export.** Column headers
+> (`Reforcatalognumber`, `Product groups`), the `|` separator, and the
+> assumption that `Product groups` holds full language-suffixed IFU PDP numbers
+> (e.g. `50-0060-EN`) all come from the export's described layout; confirm and
+> adjust `config/checks.json` once the first real file is in hand. Also note
+> the IFU set only counts `uses` children that are synced as IFU PDP objects.
 
 ---
 

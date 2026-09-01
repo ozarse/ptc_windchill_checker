@@ -30,6 +30,7 @@ from oneplm_ingestion.models import (
     Assertion,
     AttributeCheck,
     CheckResult,
+    ExcelCompareCheck,
     PythonCheck,
     RelationshipCheck,
     RelationshipComparison,
@@ -46,7 +47,7 @@ from oneplm_ingestion.registry import get_check_function
 
 log = logging.getLogger(__name__)
 
-Check = AttributeCheck | RelationshipCheck | PythonCheck
+Check = AttributeCheck | RelationshipCheck | PythonCheck | ExcelCompareCheck
 
 # Logical relationship name (from the source record's perspective) -> the stored
 # rel_type and the direction to traverse it. "forward" looks up rows where the
@@ -187,6 +188,23 @@ def load_check_configs(config_path: Path) -> list[Check]:
                 description=entry.get("description", ""),
                 requires_pdf=requires_pdf,
             ))
+        elif kind == "excel_compare":
+            check = ExcelCompareCheck(
+                name=entry["name"],
+                file=entry.get("file", ""),
+                product_column=entry.get("product_column", ""),
+                ifu_column=entry.get("ifu_column", ""),
+                description=entry.get("description", ""),
+                sheet=entry.get("sheet"),
+                ifu_separator=entry.get("ifu_separator", "|"),
+                type=entry.get("type", "Config PDP"),
+                ifu_type=entry.get("ifu_type", "IFU PDP"),
+                requires_pdf=requires_pdf,
+            )
+            for field in ("file", "product_column", "ifu_column", "ifu_separator"):
+                if not getattr(check, field):
+                    errors.append(f"{where}: '{field}' is required and must be non-empty")
+            checks.append(check)
         else:
             errors.append(f"{where}: unknown kind '{kind}'")
 
@@ -439,6 +457,10 @@ def run_check(conn, check: Check) -> list[CheckResult]:
         return run_relationship_check(conn, check)
     if isinstance(check, PythonCheck):
         return run_python_check(conn, check)
+    if isinstance(check, ExcelCompareCheck):
+        from oneplm_ingestion.excel_compare import run_excel_compare_check
+
+        return run_excel_compare_check(conn, check)
     raise TypeError(f"Unsupported check type: {type(check).__name__}")
 
 

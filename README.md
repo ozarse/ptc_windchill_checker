@@ -323,6 +323,38 @@ def my_custom_check(conn) -> list[CheckResult]:
 { "name": "My Custom Check", "kind": "python", "function": "my_custom_check" }
 ```
 
+### `excel_compare` checks
+
+Compare the products that use Config PDPs (their `used_by` targets — the products
+themselves don't need to be synced as objects) against an external Excel export,
+e.g. the bulk export from the IFU publishing website:
+
+```json
+{
+  "name": "published_products_match",
+  "kind": "excel_compare",
+  "file": "data/published_products.xlsx",
+  "product_column": "Reforcatalognumber",
+  "ifu_column": "Product groups",
+  "ifu_separator": "|"
+}
+```
+
+| Field | Required | Description |
+|---|---|---|
+| `file` | Yes | Path to the .xlsx export. If the file is missing the check emits a `skip` row instead of failing. |
+| `product_column` | Yes | Header of the column whose values equal Windchill part Numbers of the products. |
+| `ifu_column` | Yes | Header of the column listing the product's IFU numbers. |
+| `ifu_separator` | No | Separator between IFU numbers within the cell (default `\|`). |
+| `sheet` | No | Worksheet name (default: first sheet). |
+| `type` | No | Whose `used_by` targets are the products (default `Config PDP`). |
+| `ifu_type` | No | The type whose Numbers the export lists (default `IFU PDP`). |
+
+The check fails a row for: a Windchill product missing from the export, a product
+whose exported IFU set differs from the IFU PDP numbers reachable in Windchill
+(product → its Config PDPs → `uses`), and an exported product no Config PDP is
+used by. Requires `oneplm sync relationships` to have populated `used_by`/`uses`.
+
 ### Comparison Fields
 
 Each entry in an `attribute` check's `assertions` or a `relationship` check's `comparisons` has:

@@ -177,3 +177,28 @@ class PythonCheck:
     description: str = ""
     kind: str = "python"
     requires_pdf: bool = False  # Reads PDF data; excluded by `check --skip-pdf`
+
+
+@dataclass
+class ExcelCompareCheck:
+    """Compares Windchill 'where used' products against an external Excel export.
+
+    Products are the ``used_by`` targets of ``type`` records (they need not be
+    synced as objects — their ``target_number`` identifies them). Each product's
+    Windchill IFU set is the union of ``ifu_type`` records that its ``type``
+    parents ``use``. The export is read at check time from ``file``: one row per
+    product, the product number in ``product_column``, the connected IFU numbers
+    in ``ifu_column`` separated by ``ifu_separator``.
+    """
+
+    name: str
+    file: str  # Path to the .xlsx export; missing file -> skip rows
+    product_column: str  # Header of the column holding product numbers
+    ifu_column: str  # Header of the column holding IFU numbers
+    description: str = ""
+    sheet: str | None = None  # Worksheet name; default first sheet
+    ifu_separator: str = "|"
+    type: str = "Config PDP"  # Whose used_by targets are the products
+    ifu_type: str = "IFU PDP"  # Related type whose numbers the export lists
+    kind: str = "excel_compare"
+    requires_pdf: bool = False  # Reads PDF data; excluded by `check --skip-pdf`
