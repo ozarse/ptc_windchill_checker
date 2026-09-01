@@ -28,7 +28,7 @@ CHECK_NAME = "Previous Versions Not In Concept"
 # Lifecycle state(s) that count as "concept phase". Matched case-insensitively
 # against each version's State.Value AND State.Display, so either the internal
 # code or the human label may be listed.
-# CONFIRM these against your Windchill lifecycle ("Stryker Three Phase Development").
+# CONFIRM these against your Windchill lifecycle.
 CONCEPT_STATES: frozenset[str] = frozenset({"concept"})
 
 
