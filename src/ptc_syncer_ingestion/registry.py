@@ -6,7 +6,7 @@ an open sqlite3 connection and returns a list of CheckResult objects.
 
 To add a Python check:
 
-    from oneplm_ingestion.registry import register_check
+    from ptc_syncer_ingestion.registry import register_check
 
     @register_check("my_check")
     def my_check(conn) -> list[CheckResult]:
@@ -25,7 +25,7 @@ from __future__ import annotations
 import importlib
 from collections.abc import Callable
 
-from oneplm_ingestion.models import CheckResult
+from ptc_syncer_ingestion.models import CheckResult
 
 CheckFn = Callable[[object], list[CheckResult]]
 
@@ -33,9 +33,9 @@ CHECK_REGISTRY: dict[str, CheckFn] = {}
 
 # Modules that register check functions on import.
 _BUILTIN_MODULES = (
-    "oneplm_ingestion.content_checks",
-    "oneplm_ingestion.ifu_classification",
-    "oneplm_ingestion.versions",
+    "ptc_syncer_ingestion.content_checks",
+    "ptc_syncer_ingestion.ifu_classification",
+    "ptc_syncer_ingestion.versions",
 )
 
 _builtins_loaded = False

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-from oneplm_ingestion.api import DOCMGMT, PRODMGMT, WindchillClient
+from ptc_syncer_ingestion.api import DOCMGMT, PRODMGMT, WindchillClient
 
 log = logging.getLogger(__name__)
 

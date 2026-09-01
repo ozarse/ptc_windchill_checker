@@ -5,7 +5,7 @@ from __future__ import annotations
 import click
 import keyring
 
-SERVICE_NAME = "oneplm_ingestion"
+SERVICE_NAME = "ptc_syncer_ingestion"
 
 
 def store_credentials(username: str, password: str) -> None:
@@ -18,10 +18,10 @@ def get_credentials() -> tuple[str, str]:
     """Retrieve stored credentials. Raises click.ClickException if not found."""
     username = keyring.get_password(SERVICE_NAME, "username")
     if not username:
-        raise click.ClickException("No credentials stored. Run: oneplm auth login")
+        raise click.ClickException("No credentials stored. Run: ptc_syncer auth login")
     password = keyring.get_password(SERVICE_NAME, username)
     if not password:
-        raise click.ClickException("Password not found in keyring. Run: oneplm auth login")
+        raise click.ClickException("Password not found in keyring. Run: ptc_syncer auth login")
     return username, password
 
 

@@ -6,9 +6,9 @@ import json
 
 import pytest
 
-from oneplm_ingestion.checks import load_check_configs, run_all_checks
-from oneplm_ingestion.db import get_connection, init_db, save_relationships, upsert_object
-from oneplm_ingestion.models import WindchillObject
+from ptc_syncer_ingestion.checks import load_check_configs, run_all_checks
+from ptc_syncer_ingestion.db import get_connection, init_db, save_relationships, upsert_object
+from ptc_syncer_ingestion.models import WindchillObject
 
 
 def _obj(oid, type_name, number, name, attrs=None):
@@ -282,7 +282,7 @@ def test_shipped_checks_config_parses():
 
 
 def test_clear_check_results(conn, tmp_path):
-    from oneplm_ingestion.db import clear_check_results, get_check_results
+    from ptc_syncer_ingestion.db import clear_check_results, get_check_results
 
     cfg = _write_checks(tmp_path, [{
         "name": "plain", "kind": "attribute", "type": "Config PDP",

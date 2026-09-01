@@ -6,7 +6,7 @@ import json
 import sqlite3
 from pathlib import Path
 
-from oneplm_ingestion.models import CheckResult, Folder, PDFContent, WindchillObject
+from ptc_syncer_ingestion.models import CheckResult, Folder, PDFContent, WindchillObject
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS objects (

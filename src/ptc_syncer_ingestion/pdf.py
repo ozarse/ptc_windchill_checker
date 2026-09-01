@@ -7,9 +7,9 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 
-from oneplm_ingestion.api import WindchillClient
-from oneplm_ingestion.db import get_pdfs_for_object, upsert_pdf
-from oneplm_ingestion.models import PDFContent
+from ptc_syncer_ingestion.api import WindchillClient
+from ptc_syncer_ingestion.db import get_pdfs_for_object, upsert_pdf
+from ptc_syncer_ingestion.models import PDFContent
 
 log = logging.getLogger(__name__)
 

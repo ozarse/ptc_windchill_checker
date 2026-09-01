@@ -35,16 +35,16 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 
-from oneplm_ingestion.content_checks import ISO_639_1_CODES
-from oneplm_ingestion.db import (
+from ptc_syncer_ingestion.content_checks import ISO_639_1_CODES
+from ptc_syncer_ingestion.db import (
     get_object_by_id,
     get_objects_by_type,
     get_relationship_target_ids,
     save_check_results,
 )
-from oneplm_ingestion.models import CheckResult
-from oneplm_ingestion.operators import get_attr_value
-from oneplm_ingestion.registry import register_check
+from ptc_syncer_ingestion.models import CheckResult
+from ptc_syncer_ingestion.operators import get_attr_value
+from ptc_syncer_ingestion.registry import register_check
 
 log = logging.getLogger(__name__)
 

@@ -8,9 +8,9 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
-from oneplm_ingestion.api import WindchillClient
-from oneplm_ingestion.db import get_last_sync, update_sync_log, upsert_object
-from oneplm_ingestion.models import TypeConfig, WindchillObject
+from ptc_syncer_ingestion.api import WindchillClient
+from ptc_syncer_ingestion.db import get_last_sync, update_sync_log, upsert_object
+from ptc_syncer_ingestion.models import TypeConfig, WindchillObject
 
 log = logging.getLogger(__name__)
 

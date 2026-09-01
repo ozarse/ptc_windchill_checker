@@ -11,7 +11,7 @@ from __future__ import annotations
 import re
 from datetime import datetime
 
-from oneplm_ingestion.models import WhenCondition
+from ptc_syncer_ingestion.models import WhenCondition
 
 VALID_OPERATORS = frozenset({
     "equals", "not_equals",

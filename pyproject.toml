@@ -3,7 +3,7 @@ requires = ["setuptools>=68.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "oneplm_ingestion"
+name = "ptc_syncer_ingestion"
 version = "0.1.0"
 description = "CLI tool to ingest and validate data from PTC Windchill"
 requires-python = ">=3.10"
@@ -28,7 +28,7 @@ notebook = [
 ]
 
 [project.scripts]
-oneplm = "oneplm_ingestion.cli:cli"
+ptc_syncer = "ptc_syncer_ingestion.cli:cli"
 
 [tool.setuptools.packages.find]
 where = ["src"]

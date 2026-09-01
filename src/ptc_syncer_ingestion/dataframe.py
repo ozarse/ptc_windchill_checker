@@ -1,4 +1,4 @@
-"""Pandas DataFrame helpers for exploring oneplm data."""
+"""Pandas DataFrame helpers for exploring ptc_syncer data."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import pandas as pd
 
-DEFAULT_DB_PATH = Path("data/oneplm.db")
+DEFAULT_DB_PATH = Path("data/ptc_syncer.db")
 
 
 def _import_pandas():
@@ -21,7 +21,7 @@ def _import_pandas():
     except ImportError:
         raise ImportError(
             "pandas is required for DataFrame helpers. "
-            "Install with: pip install oneplm_ingestion[notebook]"
+            "Install with: pip install ptc_syncer_ingestion[notebook]"
         ) from None
 
 
@@ -41,7 +41,7 @@ def load_objects(
     """Load objects table into a DataFrame.
 
     Args:
-        db_path: Path to SQLite database. Defaults to data/oneplm.db.
+        db_path: Path to SQLite database. Defaults to data/ptc_syncer.db.
         type_name: If provided, filter to this type only.
         expand_attributes: If True, expand the JSON attributes into columns.
 

@@ -16,9 +16,9 @@ import logging
 import re
 from datetime import datetime, timezone
 
-from oneplm_ingestion.db import get_objects_by_type, get_pdfs_for_object, save_check_results
-from oneplm_ingestion.models import CheckResult
-from oneplm_ingestion.registry import register_check
+from ptc_syncer_ingestion.db import get_objects_by_type, get_pdfs_for_object, save_check_results
+from ptc_syncer_ingestion.models import CheckResult
+from ptc_syncer_ingestion.registry import register_check
 
 log = logging.getLogger(__name__)
 
@@ -329,7 +329,7 @@ def run_pdf_language_checks(conn) -> list[CheckResult]:
             else:
                 results.append(_result(
                     "Last Page", None, True,
-                    "SKIP: no extracted PDF text; run 'oneplm pdf extract' first",
+                    "SKIP: no extracted PDF text; run 'ptc_syncer pdf extract' first",
                 ))
 
     return results

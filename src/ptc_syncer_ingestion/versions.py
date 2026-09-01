@@ -12,14 +12,14 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 
-from oneplm_ingestion.db import (
+from ptc_syncer_ingestion.db import (
     get_all_objects,
     get_versions_for_object,
     save_versions,
 )
-from oneplm_ingestion.models import CheckResult
-from oneplm_ingestion.registry import register_check
-from oneplm_ingestion.relationships import collection_for_type, domain_for_type
+from ptc_syncer_ingestion.models import CheckResult
+from ptc_syncer_ingestion.registry import register_check
+from ptc_syncer_ingestion.relationships import collection_for_type, domain_for_type
 
 log = logging.getLogger(__name__)
 

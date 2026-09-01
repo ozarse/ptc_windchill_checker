@@ -1,16 +1,16 @@
-# CLAUDE.md — oneplm_ingestion
+# CLAUDE.md — ptc_syncer_ingestion
 
 ## Project Overview
 
 CLI tool that ingests PTC Windchill PLM data into a local SQLite database, runs attribute validation checks, downloads/extracts PDFs, and exports results.
 
 - **Python 3.12**, Click CLI, SQLite, keyring, docling, requests
-- Entry point: `oneplm` CLI (installed via `pip install -e .`)
+- Entry point: `ptc_syncer` CLI (installed via `pip install -e .`)
 
 ## Repository Layout
 
 ```
-src/oneplm_ingestion/   # All source modules
+src/ptc_syncer_ingestion/   # All source modules
   cli.py                # Click entry point and all subcommands
   api.py                # WindchillClient — HTTP requests to Windchill OData API
   auth.py               # Credential storage/retrieval via keyring
@@ -30,7 +30,7 @@ config/
   checks.json           # Validation rule definitions
   containers.json       # Windchill container IDs to sync folders from
 data/
-  oneplm.db             # SQLite database (gitignored)
+  ptc_syncer.db             # SQLite database (gitignored)
   pdfs/                 # Downloaded PDFs (gitignored)
 spec/                   # Windchill OData API spec JSON files (read-only reference)
 notebooks/
@@ -57,33 +57,33 @@ pip install --force-reinstall --no-deps -e .
 
 Set the required environment variable before running:
 ```bash
-export ONEPLM_BASE_URL=https://your-host/Windchill/servlet/odata
+export PTC_SYNCER_BASE_URL=https://your-host/Windchill/servlet/odata
 ```
 
 ## Running the CLI
 
 ```bash
-.venv/Scripts/oneplm --help
-.venv/Scripts/oneplm --dry-run sync objects   # log API calls without making them
-.venv/Scripts/oneplm -v <command>             # verbose: adds response status, timing, pagination
+.venv/Scripts/ptc_syncer --help
+.venv/Scripts/ptc_syncer --dry-run sync objects   # log API calls without making them
+.venv/Scripts/ptc_syncer -v <command>             # verbose: adds response status, timing, pagination
 ```
 
 Common workflow:
 ```bash
-oneplm auth login              # store credentials in Windows keyring
-oneplm init                    # create DB tables
-oneplm --dry-run sync objects  # preview the API calls sync would make
-oneplm sync objects            # fetch all typed objects (documents, parts)
-oneplm sync folder             # walk folder hierarchy recursively
-oneplm check                   # run all validation rules
-oneplm export checks -o results.csv
+ptc_syncer auth login              # store credentials in Windows keyring
+ptc_syncer init                    # create DB tables
+ptc_syncer --dry-run sync objects  # preview the API calls sync would make
+ptc_syncer sync objects            # fetch all typed objects (documents, parts)
+ptc_syncer sync folder             # walk folder hierarchy recursively
+ptc_syncer check                   # run all validation rules
+ptc_syncer export checks -o results.csv
 ```
 
 ## Running Tests and Linting
 
 ```bash
 pytest                     # run all tests
-pytest --cov=oneplm_ingestion tests/
+pytest --cov=ptc_syncer_ingestion tests/
 ruff check src/            # lint
 ruff format src/           # format
 ```
@@ -94,7 +94,7 @@ Ruff is configured in `pyproject.toml`: line length 120, target Python 3.10.
 
 ### Database
 
-Seven tables in `data/oneplm.db`:
+Seven tables in `data/ptc_syncer.db`:
 
 | Table | Purpose |
 |---|---|
@@ -110,9 +110,9 @@ Attributes are stored as a JSON blob (`attributes_json`) and accessed with dot n
 
 ### API
 
-`WindchillClient` in [api.py](src/oneplm_ingestion/api.py) wraps Windchill OData:
+`WindchillClient` in [api.py](src/ptc_syncer_ingestion/api.py) wraps Windchill OData:
 
-- Base URL from `ONEPLM_BASE_URL` env var
+- Base URL from `PTC_SYNCER_BASE_URL` env var
 - Credentials from keyring (`auth.py`)
 - CSRF token from `v4/PTC`
 - Pagination via `@odata.nextLink`
@@ -160,7 +160,7 @@ Configured via [config/containers.json](config/containers.json) — a list of Wi
 { "id": "OR:...", "label": "My Library", "folder_paths": ["/Default/01 - Parts"] }
 ```
 
-Run with `oneplm sync folder`. The sequence per container:
+Run with `ptc_syncer sync folder`. The sequence per container:
 
 1. `GET /v6/DataAdmin/Containers('{id}')/Folders?$expand=Folders($levels=max)` — fetches the complete folder tree in a single call. The nested response is walked locally; each folder is upserted with `parent_folder_id` derived from its position in the tree.
 2. If `folder_paths` is set, filter to folders whose full path (`location + "/" + name`) starts with a configured prefix. Note: the API `Location` field is the **parent** path, not the folder's own full path.
@@ -171,20 +171,20 @@ Use `--containers-config <path>` to point at a different config file.
 
 ### Validation Checks
 
-Checks are defined declaratively in [config/checks.json](config/checks.json) and executed by [checks.py](src/oneplm_ingestion/checks.py). [docs/CHECKS.md](docs/CHECKS.md) is the human-readable catalog of every check, its data prerequisites, and open items — keep it in sync when checks change. Each entry has a `kind`:
+Checks are defined declaratively in [config/checks.json](config/checks.json) and executed by [checks.py](src/ptc_syncer_ingestion/checks.py). [docs/CHECKS.md](docs/CHECKS.md) is the human-readable catalog of every check, its data prerequisites, and open items — keep it in sync when checks change. Each entry has a `kind`:
 
 - **`attribute`** — validates attributes of individual records of one `type`. Carries a list of `assertions`, each an `attr` + `operator` (+ optional `value`, + optional `when`).
 - **`relationship`** — validates a record against the records reached through a Windchill relationship. Names a source `type`, a `related_type`, and a `via` (one of `describes`, `described_by`, `uses`, `used_by`), then runs `comparisons` between source and related attributes (or against literals: `value` for the source attr, `target_value` for the related record's attr). `min_count`/`max_count` bound how many related records must exist. `on_missing` (`fail` | `skip`) controls behaviour when no related record exists; a link whose target isn't synced locally is reported distinctly from a missing link.
-- **`python`** — delegates to a function registered in [registry.py](src/oneplm_ingestion/registry.py) via `@register_check("<name>")`, referenced by `function`. The escape hatch for logic that does not fit the declarative forms.
-- **`excel_compare`** — compares the products that use Config PDPs (`used_by` targets; not synced as objects) against an external .xlsx export ([excel_compare.py](src/oneplm_ingestion/excel_compare.py)). Declares the file path, product/IFU column headers, and separator; missing file → skip row, not a failure. Reads the file at check time via a deferred `openpyxl` import.
+- **`python`** — delegates to a function registered in [registry.py](src/ptc_syncer_ingestion/registry.py) via `@register_check("<name>")`, referenced by `function`. The escape hatch for logic that does not fit the declarative forms.
+- **`excel_compare`** — compares the products that use Config PDPs (`used_by` targets; not synced as objects) against an external .xlsx export ([excel_compare.py](src/ptc_syncer_ingestion/excel_compare.py)). Declares the file path, product/IFU column headers, and separator; missing file → skip row, not a failure. Reads the file at check time via a deferred `openpyxl` import.
 
-The shared operator set lives in [operators.py](src/oneplm_ingestion/operators.py): `equals`, `not_equals`, `contains`, `not_contains`, `not_empty`, `is_empty`, `matches` (regex), `greater_than`, `less_than`, `greater_equal`, `less_equal`, `before`, `after`. Assertions and comparisons both support an optional `when` precondition evaluated against the source record.
+The shared operator set lives in [operators.py](src/ptc_syncer_ingestion/operators.py): `equals`, `not_equals`, `contains`, `not_contains`, `not_empty`, `is_empty`, `matches` (regex), `greater_than`, `less_than`, `greater_equal`, `less_equal`, `before`, `after`. Assertions and comparisons both support an optional `when` precondition evaluated against the source record.
 
 Relationship checks join records **offline** from the `relationships` table. `sync relationships` resolves `described_by` / `uses` through their second navigation hop and `used_by` directly, storing each related object's real `target_id` and `target_number` — so a check like "IFU Drawing and IFU PDP share the same Number" pairs records by the actual link, not by matching Number. The `describes` direction is the stored `described_by` traversed in inverse. Re-run `sync relationships` after schema changes to populate these.
 
 ### CLI Design
 
-All CLI commands are in [cli.py](src/oneplm_ingestion/cli.py). Heavy imports (especially `docling`) are deferred inside command functions to keep startup fast.
+All CLI commands are in [cli.py](src/ptc_syncer_ingestion/cli.py). Heavy imports (especially `docling`) are deferred inside command functions to keep startup fast.
 
 Global options (`--db`, `--data-dir`, `-v`, `--dry-run`) are passed via `click.pass_context` and stored in `ctx.obj`. Commands that construct `WindchillClient` read `ctx.obj["dry_run"]` and forward it.
 
@@ -205,7 +205,7 @@ Global options (`--db`, `--data-dir`, `-v`, `--dry-run`) are passed via `click.p
 
 | Variable | Default | Description |
 |---|---|---|
-| `ONEPLM_BASE_URL` | (required) | Windchill OData base URL |
-| `ONEPLM_DB_PATH` | `data/oneplm.db` | SQLite database path |
-| `ONEPLM_DATA_DIR` | `data/` | Directory for downloaded files |
-| `ONEPLM_DRY_RUN` | `0` | Set to `1` to enable dry-run mode (same as `--dry-run`) |
+| `PTC_SYNCER_BASE_URL` | (required) | Windchill OData base URL |
+| `PTC_SYNCER_DB_PATH` | `data/ptc_syncer.db` | SQLite database path |
+| `PTC_SYNCER_DATA_DIR` | `data/` | Directory for downloaded files |
+| `PTC_SYNCER_DRY_RUN` | `0` | Set to `1` to enable dry-run mode (same as `--dry-run`) |

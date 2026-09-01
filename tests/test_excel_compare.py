@@ -7,9 +7,9 @@ import json
 import pytest
 from openpyxl import Workbook
 
-from oneplm_ingestion.checks import load_check_configs, run_all_checks
-from oneplm_ingestion.db import get_connection, init_db, save_relationships, upsert_object
-from oneplm_ingestion.models import WindchillObject
+from ptc_syncer_ingestion.checks import load_check_configs, run_all_checks
+from ptc_syncer_ingestion.db import get_connection, init_db, save_relationships, upsert_object
+from ptc_syncer_ingestion.models import WindchillObject
 
 # The publishing website's export headers, as provided.
 HEADERS = [

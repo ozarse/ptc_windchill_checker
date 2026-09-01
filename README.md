@@ -1,4 +1,4 @@
-# oneplm_ingestion
+# ptc_syncer_ingestion
 
 CLI tool to ingest PTC Windchill PLM data, compare attributes across object types, extract PDFs, and export results.
 
@@ -25,94 +25,94 @@ pip install -e ".[notebook]"
 # Set your Windchill base URL (a real shell variable — there is no .env auto-loading).
 # It is read from the environment on each command, so set it in every new session
 # or add it to your shell profile.
-set ONEPLM_BASE_URL=https://your-host/Windchill/servlet/odata     # Windows cmd
-# $env:ONEPLM_BASE_URL = "https://your-host/Windchill/servlet/odata"   # PowerShell
-# export ONEPLM_BASE_URL=https://your-host/Windchill/servlet/odata     # bash
+set PTC_SYNCER_BASE_URL=https://your-host/Windchill/servlet/odata     # Windows cmd
+# $env:PTC_SYNCER_BASE_URL = "https://your-host/Windchill/servlet/odata"   # PowerShell
+# export PTC_SYNCER_BASE_URL=https://your-host/Windchill/servlet/odata     # bash
 
 # Store credentials (saved in the Windows keyring)
-oneplm auth login
+ptc_syncer auth login
 
 # Initialize the local database
-oneplm init
+ptc_syncer init
 
 # Sync typed objects (Config PDPs, IFU PDPs, IFU Drawings)
-oneplm sync objects
+ptc_syncer sync objects
 
 # Edit config/containers.json with your real container ID(s)
 # then sync the folder hierarchy
-oneplm sync folder
+ptc_syncer sync folder
 
 # Resolve relationships (required before relationship checks)
-oneplm sync relationships
+ptc_syncer sync relationships
 
 # Run validation checks
-oneplm check
+ptc_syncer check
 
 # Export results
-oneplm export checks -o check_results.csv
+ptc_syncer export checks -o check_results.csv
 ```
 
 ## Commands
 
 | Command | Description |
 |---------|-------------|
-| `oneplm init` | Create/initialize the local SQLite database |
-| `oneplm status` | Show object counts, last sync times, check summaries |
-| `oneplm auth login` | Store Windchill credentials in the system keyring |
-| `oneplm auth logout` | Remove stored credentials |
-| `oneplm auth status` | Check if credentials are stored |
-| `oneplm sync objects` | Sync typed objects (documents, parts) from Windchill |
-| `oneplm sync relationships` | Resolve and store object relationships (needed for relationship/classification checks) |
-| `oneplm sync versions` | Fetch and store each object's version history (needed for the version check) |
-| `oneplm sync folder` | Sync folder hierarchy recursively from configured containers |
-| `oneplm lookup <number>` | Look up a document or part by number and show relationships |
-| `oneplm check` | Run validation checks (`--skip-pdf` to exclude PDF-dependent checks) |
-| `oneplm pdf download` | Download PDFs from Windchill (skips existing files unless changed; `--force`, `--primary-only`, `--metadata-only`) |
-| `oneplm pdf extract` | Extract text from downloaded PDFs using docling |
-| `oneplm pdf check` | Validate IFU Drawing filenames against object metadata |
-| `oneplm export objects` | Export synced objects to CSV |
-| `oneplm export checks` | Export check results to CSV |
+| `ptc_syncer init` | Create/initialize the local SQLite database |
+| `ptc_syncer status` | Show object counts, last sync times, check summaries |
+| `ptc_syncer auth login` | Store Windchill credentials in the system keyring |
+| `ptc_syncer auth logout` | Remove stored credentials |
+| `ptc_syncer auth status` | Check if credentials are stored |
+| `ptc_syncer sync objects` | Sync typed objects (documents, parts) from Windchill |
+| `ptc_syncer sync relationships` | Resolve and store object relationships (needed for relationship/classification checks) |
+| `ptc_syncer sync versions` | Fetch and store each object's version history (needed for the version check) |
+| `ptc_syncer sync folder` | Sync folder hierarchy recursively from configured containers |
+| `ptc_syncer lookup <number>` | Look up a document or part by number and show relationships |
+| `ptc_syncer check` | Run validation checks (`--skip-pdf` to exclude PDF-dependent checks) |
+| `ptc_syncer pdf download` | Download PDFs from Windchill (skips existing files unless changed; `--force`, `--primary-only`, `--metadata-only`) |
+| `ptc_syncer pdf extract` | Extract text from downloaded PDFs using docling |
+| `ptc_syncer pdf check` | Validate IFU Drawing filenames against object metadata |
+| `ptc_syncer export objects` | Export synced objects to CSV |
+| `ptc_syncer export checks` | Export check results to CSV |
 
 ### Global Options
 
 These go before the subcommand:
 
-- `--db <path>` -- Path to SQLite database (default: `data/oneplm.db`)
+- `--db <path>` -- Path to SQLite database (default: `data/ptc_syncer.db`)
 - `--data-dir <path>` -- Directory for downloaded files (default: `data/`)
 - `-v` / `--verbose` -- Enable debug logging (response status, timing, pagination)
-- `--dry-run` -- Log every API call that would be made without sending any requests (also set via `ONEPLM_DRY_RUN=1`)
+- `--dry-run` -- Log every API call that would be made without sending any requests (also set via `PTC_SYNCER_DRY_RUN=1`)
 
 ```bash
 # See exactly which API calls a sync would make, without touching Windchill
-oneplm --dry-run sync objects
-oneplm --dry-run sync folder
+ptc_syncer --dry-run sync objects
+ptc_syncer --dry-run sync folder
 
 # Same for a lookup
-oneplm --dry-run lookup ABC-1234
+ptc_syncer --dry-run lookup ABC-1234
 
 # Add -v to also see pagination and timing details
-oneplm -v sync objects
+ptc_syncer -v sync objects
 ```
 
 ### Sync Options
 
 ```bash
 # Object sync
-oneplm sync objects                            # sync all typed objects
-oneplm sync objects --type "IFU Drawing"       # sync only one object type
-oneplm sync objects --full                     # ignore last_modified, re-fetch everything
-oneplm sync objects --types-config path/to/types.json
+ptc_syncer sync objects                            # sync all typed objects
+ptc_syncer sync objects --type "IFU Drawing"       # sync only one object type
+ptc_syncer sync objects --full                     # ignore last_modified, re-fetch everything
+ptc_syncer sync objects --types-config path/to/types.json
 
 # Folder sync
-oneplm sync folder                             # sync folder hierarchy from containers.json
-oneplm sync folder --containers-config path/to/other.json
+ptc_syncer sync folder                             # sync folder hierarchy from containers.json
+ptc_syncer sync folder --containers-config path/to/other.json
 ```
 
 ---
 
 ## Folder Sync
 
-`oneplm sync folder` walks the complete folder hierarchy for each container configured in `config/containers.json`.
+`ptc_syncer sync folder` walks the complete folder hierarchy for each container configured in `config/containers.json`.
 
 ### Container Configuration
 
@@ -166,20 +166,20 @@ Objects are committed to the database after each folder, so a crash mid-run pres
 
 ## PDF Download & Extraction
 
-`oneplm pdf download` fetches content for objects already in the local database
-(sync them with `oneplm sync objects` or `oneplm sync folder` first). Files are
+`ptc_syncer pdf download` fetches content for objects already in the local database
+(sync them with `ptc_syncer sync objects` or `ptc_syncer sync folder` first). Files are
 saved under the data directory in `pdfs/` (default `data/pdfs/`) and each file's
 metadata is recorded in the `pdfs` table.
 
 ```bash
 # Download PDFs for every object of a type
-oneplm pdf download --type "IFU Drawing"
+ptc_syncer pdf download --type "IFU Drawing"
 
 # Download PDFs for a single object
-oneplm pdf download --object-id "OR:wt.doc.WTDocument:12345"
+ptc_syncer pdf download --object-id "OR:wt.doc.WTDocument:12345"
 
 # Extract text from downloaded PDFs (docling)
-oneplm pdf extract --all
+ptc_syncer pdf extract --all
 ```
 
 ### Download Options
@@ -206,14 +206,14 @@ A file that already exists is still re-downloaded automatically when the object
 changed in Windchill since it was last pulled — that is, when the object's
 `LastModified` is newer than the file's stored `downloaded_at`. When this
 happens the file is refreshed and its stale extracted text is cleared so the next
-`oneplm pdf extract` re-processes it. Use `--force` to re-download unconditionally.
+`ptc_syncer pdf extract` re-processes it. Use `--force` to re-download unconditionally.
 
 Because change detection compares against each object's `LastModified`, refresh
 the objects first so the timestamps are current:
 
 ```bash
-oneplm sync objects                          # refreshes each object's LastModified
-oneplm pdf download --type "IFU Drawing"     # re-pulls only drawings that changed
+ptc_syncer sync objects                          # refreshes each object's LastModified
+ptc_syncer pdf download --type "IFU Drawing"     # re-pulls only drawings that changed
 ```
 
 `--metadata-only` never touches disk, so it ignores `--force` and change
@@ -221,7 +221,7 @@ detection; it simply refreshes the URL/filename rows.
 
 ### Filename Validation
 
-`oneplm pdf check` validates each IFU Drawing's primary-content filename against
+`ptc_syncer pdf check` validates each IFU Drawing's primary-content filename against
 its metadata (number, revision, and language code), storing results in
 `check_results`. Populate PDF metadata first with either a full `pdf download` or
 `pdf download --metadata-only`.
@@ -230,7 +230,7 @@ its metadata (number, revision, and language code), storing results in
 
 ## Attribute Validation Checks
 
-The check system validates the records ingested from Windchill. Checks are defined in `config/checks.json` and executed with `oneplm check`. Results (pass/fail/skip) are saved to the database and can be exported to CSV. See [`docs/CHECKS.md`](docs/CHECKS.md) for the catalog of every check currently defined, its data prerequisites, and open items.
+The check system validates the records ingested from Windchill. Checks are defined in `config/checks.json` and executed with `ptc_syncer check`. Results (pass/fail/skip) are saved to the database and can be exported to CSV. See [`docs/CHECKS.md`](docs/CHECKS.md) for the catalog of every check currently defined, its data prerequisites, and open items.
 
 ### Check Kinds
 
@@ -272,7 +272,7 @@ Validate each record of one `type` against a list of `assertions`:
 
 ### `relationship` checks
 
-Validate a record against the records reached through a Windchill relationship. The relationship is resolved **offline** from the local `relationships` table (run `oneplm sync relationships` first):
+Validate a record against the records reached through a Windchill relationship. The relationship is resolved **offline** from the local `relationships` table (run `ptc_syncer sync relationships` first):
 
 ```json
 {
@@ -311,8 +311,8 @@ For logic that does not fit the declarative forms, register a function and refer
 
 ```python
 # in any module imported by registry.py's load_builtin_checks
-from oneplm_ingestion.registry import register_check
-from oneplm_ingestion.models import CheckResult
+from ptc_syncer_ingestion.registry import register_check
+from ptc_syncer_ingestion.models import CheckResult
 
 @register_check("my_custom_check")
 def my_custom_check(conn) -> list[CheckResult]:
@@ -353,7 +353,7 @@ e.g. the bulk export from the IFU publishing website:
 The check fails a row for: a Windchill product missing from the export, a product
 whose exported IFU set differs from the IFU PDP numbers reachable in Windchill
 (product → its Config PDPs → `uses`), and an exported product no Config PDP is
-used by. Requires `oneplm sync relationships` to have populated `used_by`/`uses`.
+used by. Requires `ptc_syncer sync relationships` to have populated `used_by`/`uses`.
 
 ### Comparison Fields
 
@@ -447,7 +447,7 @@ Attributes are accessed from the full Windchill API response stored for each obj
 To discover what attributes are available, use the exploration notebook or export objects to CSV:
 
 ```bash
-oneplm export objects -o objects.csv
+ptc_syncer export objects -o objects.csv
 ```
 
 ### Available Types
@@ -530,28 +530,28 @@ Types are defined in `config/types.json`. The default types are:
 
 ```bash
 # Run all checks
-oneplm check
+ptc_syncer check
 
 # Run a specific check by name
-oneplm check --check ifu_drawing_matches_ifu_pdp
+ptc_syncer check --check ifu_drawing_matches_ifu_pdp
 
 # Run multiple specific checks
-oneplm check --check config_pdp_attributes --check ifu_pdp_attributes
+ptc_syncer check --check config_pdp_attributes --check ifu_pdp_attributes
 
 # Skip checks that need PDF data (marked "requires_pdf") when PDFs aren't downloaded
-oneplm check --skip-pdf
+ptc_syncer check --skip-pdf
 
 # Wipe all previous results (removes stale/orphan rows) before running
-oneplm check --clear
+ptc_syncer check --clear
 
 # Use a different config file
-oneplm check --checks-config path/to/my_checks.json
+ptc_syncer check --checks-config path/to/my_checks.json
 
 # Export results to CSV
-oneplm export checks -o check_results.csv
+ptc_syncer export checks -o check_results.csv
 
 # Export only failures
-oneplm export checks --failed-only -o failures.csv
+ptc_syncer export checks --failed-only -o failures.csv
 ```
 
 Checks that read the `pdfs` table are marked `"requires_pdf": true` in
@@ -590,35 +590,35 @@ jupyter notebook notebooks/exploration.ipynb
 2. **Explore objects by type** -- Load objects as DataFrames, inspect available columns
 3. **Find missing values** -- Identify attributes with nulls/blanks
 4. **Prototype checks** -- Test conditional logic and cross-type comparisons with pandas
-5. **Review check results** -- Inspect pass/fail summaries after running `oneplm check`
+5. **Review check results** -- Inspect pass/fail summaries after running `ptc_syncer check`
 6. **Formalize rules** -- Template for converting notebook findings into JSON rules
 
 ### DataFrame Helpers
 
-The `oneplm_ingestion.dataframe` module provides reusable functions for loading data:
+The `ptc_syncer_ingestion.dataframe` module provides reusable functions for loading data:
 
 ```python
-from oneplm_ingestion.dataframe import load_objects, load_check_results, load_sync_log, load_pdfs
+from ptc_syncer_ingestion.dataframe import load_objects, load_check_results, load_sync_log, load_pdfs
 
 # Load all objects with attributes expanded into columns
-df = load_objects("data/oneplm.db")
+df = load_objects("data/ptc_syncer.db")
 
 # Load a specific type
-parts = load_objects("data/oneplm.db", type_name="IFU PDP")
+parts = load_objects("data/ptc_syncer.db", type_name="IFU PDP")
 
 # Load without expanding the JSON attributes column
-raw = load_objects("data/oneplm.db", expand_attributes=False)
+raw = load_objects("data/ptc_syncer.db", expand_attributes=False)
 
 # Load check results
-results = load_check_results("data/oneplm.db")
-failures = load_check_results("data/oneplm.db", failed_only=True)
+results = load_check_results("data/ptc_syncer.db")
+failures = load_check_results("data/ptc_syncer.db", failed_only=True)
 ```
 
 ### Typical Workflow
 
-1. **Sync** data from Windchill: `oneplm sync`
+1. **Sync** data from Windchill: `ptc_syncer sync`
 2. **Explore** in the notebook -- find patterns, missing values, mismatches
 3. **Write a rule** in `config/checks.json` based on what you found
-4. **Run** the check: `oneplm check --check your_rule_name`
-5. **Export** results: `oneplm export checks -o results.csv`
+4. **Run** the check: `ptc_syncer check --check your_rule_name`
+5. **Export** results: `ptc_syncer export checks -o results.csv`
 6. Repeat

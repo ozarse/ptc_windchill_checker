@@ -5,7 +5,7 @@ API structure (from specs):
   - Product Management:  /Windchill/servlet/odata/v6/ProdMgmt/
   - Common:              /Windchill/servlet/odata/v4/PTC/
 
-Set ONEPLM_BASE_URL to the root, e.g. https://windchill.company.com/Windchill/servlet/odata
+Set PTC_SYNCER_BASE_URL to the root, e.g. https://windchill.company.com/Windchill/servlet/odata
 """
 
 from __future__ import annotations
@@ -17,11 +17,11 @@ import time
 import requests
 from requests.auth import HTTPBasicAuth
 
-from oneplm_ingestion.auth import get_basic_auth
+from ptc_syncer_ingestion.auth import get_basic_auth
 
 log = logging.getLogger(__name__)
 
-# Domain base paths (relative to ONEPLM_BASE_URL)
+# Domain base paths (relative to PTC_SYNCER_BASE_URL)
 DOCMGMT = "v6/DocMgmt"
 PRODMGMT = "v6/ProdMgmt"
 DATAADMIN = "v6/DataAdmin"
@@ -37,9 +37,9 @@ class WindchillClient:
         auth: HTTPBasicAuth | None = None,
         dry_run: bool = False,
     ):
-        self.base_url = (base_url or os.environ.get("ONEPLM_BASE_URL", "")).rstrip("/")
+        self.base_url = (base_url or os.environ.get("PTC_SYNCER_BASE_URL", "")).rstrip("/")
         if not self.base_url:
-            raise ValueError("ONEPLM_BASE_URL env variable not set and no base_url provided")
+            raise ValueError("PTC_SYNCER_BASE_URL env variable not set and no base_url provided")
         self.dry_run = dry_run
         self.auth = auth or get_basic_auth()
         self.session = requests.Session()

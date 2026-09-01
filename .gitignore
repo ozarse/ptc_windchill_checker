@@ -4,7 +4,7 @@ __pycache__/
 *.egg-info/
 dist/
 build/
-data/oneplm.db
+data/ptc_syncer.db
 data/pdfs/
 *.csv
 .env

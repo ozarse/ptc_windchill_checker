@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from oneplm_ingestion.content_checks import code_token_present, run_pdf_language_checks
-from oneplm_ingestion.db import get_connection, init_db, upsert_object, upsert_pdf
-from oneplm_ingestion.models import PDFContent, WindchillObject
+from ptc_syncer_ingestion.content_checks import code_token_present, run_pdf_language_checks
+from ptc_syncer_ingestion.db import get_connection, init_db, upsert_object, upsert_pdf
+from ptc_syncer_ingestion.models import PDFContent, WindchillObject
 
 
 def _drawing(oid, number, name):
@@ -80,7 +80,7 @@ def test_missing_extracted_text_skips_last_page(tmp_path):
 
 
 def test_registered_via_engine(tmp_path):
-    from oneplm_ingestion.checks import run_all_checks
+    from ptc_syncer_ingestion.checks import run_all_checks
 
     conn = get_connection(tmp_path / "t.db")
     init_db(conn)

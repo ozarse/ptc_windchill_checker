@@ -8,23 +8,23 @@ from pathlib import Path
 import click
 
 DEFAULT_DATA_DIR = Path("./data")
-DEFAULT_DB_PATH = DEFAULT_DATA_DIR / "oneplm.db"
+DEFAULT_DB_PATH = DEFAULT_DATA_DIR / "ptc_syncer.db"
 DEFAULT_TYPES_CONFIG = Path("./config/types.json")
 DEFAULT_CHECKS_CONFIG = Path("./config/checks.json")
 DEFAULT_CONTAINERS_CONFIG = Path("./config/containers.json")
 
 
 @click.group()
-@click.option("--db", default=str(DEFAULT_DB_PATH), envvar="ONEPLM_DB_PATH",
+@click.option("--db", default=str(DEFAULT_DB_PATH), envvar="PTC_SYNCER_DB_PATH",
               help="Path to SQLite database file.")
-@click.option("--data-dir", default=str(DEFAULT_DATA_DIR), envvar="ONEPLM_DATA_DIR",
+@click.option("--data-dir", default=str(DEFAULT_DATA_DIR), envvar="PTC_SYNCER_DATA_DIR",
               help="Directory for downloaded files.")
 @click.option("-v", "--verbose", is_flag=True, help="Enable debug logging.")
-@click.option("--dry-run", is_flag=True, envvar="ONEPLM_DRY_RUN",
+@click.option("--dry-run", is_flag=True, envvar="PTC_SYNCER_DRY_RUN",
               help="Log API calls without making them. No data is written.")
 @click.pass_context
 def cli(ctx, db, data_dir, verbose, dry_run):
-    """oneplm - Windchill PLM data ingestion and validation tool."""
+    """ptc_syncer - Windchill PLM data ingestion and validation tool."""
     logging.basicConfig(
         level=logging.DEBUG if verbose else logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
@@ -35,7 +35,7 @@ def cli(ctx, db, data_dir, verbose, dry_run):
     ctx.obj["dry_run"] = dry_run
     if dry_run:
         import logging as _logging
-        _logging.getLogger("oneplm_ingestion.api").info("[dry-run mode] no requests will be made")
+        _logging.getLogger("ptc_syncer_ingestion.api").info("[dry-run mode] no requests will be made")
 
 
 # ---------------------------------------------------------------------------
@@ -47,7 +47,7 @@ def cli(ctx, db, data_dir, verbose, dry_run):
 @click.pass_context
 def init_database(ctx):
     """Initialize the local database (creates tables if they don't exist)."""
-    from oneplm_ingestion.db import get_connection, init_db
+    from ptc_syncer_ingestion.db import get_connection, init_db
 
     db_path = ctx.obj["db_path"]
     conn = get_connection(db_path)
@@ -60,7 +60,7 @@ def init_database(ctx):
 @click.pass_context
 def status(ctx):
     """Show database status: object counts, last sync times."""
-    from oneplm_ingestion.db import get_connection, init_db
+    from ptc_syncer_ingestion.db import get_connection, init_db
 
     conn = get_connection(ctx.obj["db_path"])
     init_db(conn)
@@ -114,7 +114,7 @@ def auth():
 @auth.command("login")
 def auth_login():
     """Store Windchill credentials in the system keyring."""
-    from oneplm_ingestion.auth import store_credentials
+    from ptc_syncer_ingestion.auth import store_credentials
 
     username = click.prompt("Username")
     password = click.prompt("Password", hide_input=True)
@@ -125,7 +125,7 @@ def auth_login():
 @auth.command("logout")
 def auth_logout():
     """Remove stored credentials."""
-    from oneplm_ingestion.auth import delete_credentials
+    from ptc_syncer_ingestion.auth import delete_credentials
 
     delete_credentials()
     click.echo("Credentials removed.")
@@ -134,7 +134,7 @@ def auth_logout():
 @auth.command("status")
 def auth_status():
     """Check if credentials are stored."""
-    from oneplm_ingestion.auth import get_credentials
+    from ptc_syncer_ingestion.auth import get_credentials
 
     try:
         username, _ = get_credentials()
@@ -157,8 +157,8 @@ def lookup(ctx, number):
     Searches both Documents and Parts, then follows relationships to find
     associated documents, parts, and containers/libraries.
     """
-    from oneplm_ingestion.api import WindchillClient
-    from oneplm_ingestion.lookup import format_lookup_result, lookup_by_number
+    from ptc_syncer_ingestion.api import WindchillClient
+    from ptc_syncer_ingestion.lookup import format_lookup_result, lookup_by_number
 
     client = WindchillClient(dry_run=ctx.obj["dry_run"])
     result = lookup_by_number(client, number)
@@ -183,9 +183,9 @@ def sync():
 @click.pass_context
 def sync_objects(ctx, types_config, type_names, full):
     """Sync object types (documents, parts) from Windchill into the local database."""
-    from oneplm_ingestion.api import WindchillClient
-    from oneplm_ingestion.db import get_connection, init_db
-    from oneplm_ingestion.sync import sync_all
+    from ptc_syncer_ingestion.api import WindchillClient
+    from ptc_syncer_ingestion.db import get_connection, init_db
+    from ptc_syncer_ingestion.sync import sync_all
 
     conn = get_connection(ctx.obj["db_path"])
     init_db(conn)
@@ -215,9 +215,9 @@ def sync_relationships(ctx, type_names, skip_existing):
     """
     from datetime import datetime, timezone
 
-    from oneplm_ingestion.api import WindchillClient
-    from oneplm_ingestion.db import get_all_objects, get_connection, get_objects_by_type, get_relationships_for_object, init_db
-    from oneplm_ingestion.relationships import (
+    from ptc_syncer_ingestion.api import WindchillClient
+    from ptc_syncer_ingestion.db import get_all_objects, get_connection, get_objects_by_type, get_relationships_for_object, init_db
+    from ptc_syncer_ingestion.relationships import (
         collection_for_type,
         domain_for_type,
         fetch_and_store_relationships,
@@ -275,15 +275,15 @@ def sync_versions(ctx, type_names, skip_existing):
     """
     from datetime import datetime, timezone
 
-    from oneplm_ingestion.api import WindchillClient
-    from oneplm_ingestion.db import (
+    from ptc_syncer_ingestion.api import WindchillClient
+    from ptc_syncer_ingestion.db import (
         get_all_objects,
         get_connection,
         get_objects_by_type,
         init_db,
         object_has_versions,
     )
-    from oneplm_ingestion.versions import fetch_and_store_versions
+    from ptc_syncer_ingestion.versions import fetch_and_store_versions
 
     conn = get_connection(ctx.obj["db_path"])
     init_db(conn)
@@ -325,10 +325,10 @@ def sync_folder(ctx, containers_config, types_config):
     Fetches the full folder tree in one call, then retrieves the complete
     metadata for every part and document found in each folder.
     """
-    from oneplm_ingestion.api import WindchillClient
-    from oneplm_ingestion.db import get_connection, init_db
-    from oneplm_ingestion.folders import sync_folders
-    from oneplm_ingestion.sync import load_type_configs
+    from ptc_syncer_ingestion.api import WindchillClient
+    from ptc_syncer_ingestion.db import get_connection, init_db
+    from ptc_syncer_ingestion.folders import sync_folders
+    from ptc_syncer_ingestion.sync import load_type_configs
 
     containers_path = Path(containers_config)
     if not containers_path.exists():
@@ -375,10 +375,10 @@ def pdf_download(ctx, type_name, object_id, types_config, metadata_only, primary
     --primary-only to fetch just the document's primary content and skip
     attachments.
     """
-    from oneplm_ingestion.api import WindchillClient
-    from oneplm_ingestion.db import get_connection, get_object_by_id, get_objects_by_type
-    from oneplm_ingestion.pdf import download_pdfs_for_object, fetch_pdf_metadata_for_object
-    from oneplm_ingestion.sync import load_type_configs
+    from ptc_syncer_ingestion.api import WindchillClient
+    from ptc_syncer_ingestion.db import get_connection, get_object_by_id, get_objects_by_type
+    from ptc_syncer_ingestion.pdf import download_pdfs_for_object, fetch_pdf_metadata_for_object
+    from ptc_syncer_ingestion.sync import load_type_configs
 
     conn = get_connection(ctx.obj["db_path"])
     client = WindchillClient(dry_run=ctx.obj["dry_run"])
@@ -425,8 +425,8 @@ def pdf_download(ctx, type_name, object_id, types_config, metadata_only, primary
 @click.pass_context
 def pdf_extract(ctx, object_id, extract_all):
     """Extract text from downloaded PDFs using docling."""
-    from oneplm_ingestion.db import get_connection, get_pdfs_for_object, get_pdfs_pending_extraction
-    from oneplm_ingestion.pdf import extract_and_save
+    from ptc_syncer_ingestion.db import get_connection, get_pdfs_for_object, get_pdfs_pending_extraction
+    from ptc_syncer_ingestion.pdf import extract_and_save
 
     conn = get_connection(ctx.obj["db_path"])
 
@@ -467,8 +467,8 @@ def pdf_check(ctx):
     "Content Change Required". Run 'pdf download --metadata-only' first
     to populate PDF metadata without downloading files.
     """
-    from oneplm_ingestion.content_checks import run_and_save
-    from oneplm_ingestion.db import get_connection
+    from ptc_syncer_ingestion.content_checks import run_and_save
+    from ptc_syncer_ingestion.db import get_connection
 
     conn = get_connection(ctx.obj["db_path"])
     results = run_and_save(conn)
@@ -494,8 +494,8 @@ def pdf_check(ctx):
 @click.pass_context
 def check(ctx, checks_config, check_names, skip_pdf, clear):
     """Run attribute validation checks against local data."""
-    from oneplm_ingestion.checks import run_all_checks
-    from oneplm_ingestion.db import clear_check_results, get_connection
+    from ptc_syncer_ingestion.checks import run_all_checks
+    from ptc_syncer_ingestion.db import clear_check_results, get_connection
 
     conn = get_connection(ctx.obj["db_path"])
     if clear:
@@ -537,8 +537,8 @@ def export():
 @click.pass_context
 def export_objects_cmd(ctx, type_name, output):
     """Export synced objects to CSV."""
-    from oneplm_ingestion.db import get_connection
-    from oneplm_ingestion.export import export_objects
+    from ptc_syncer_ingestion.db import get_connection
+    from ptc_syncer_ingestion.export import export_objects
 
     conn = get_connection(ctx.obj["db_path"])
     count = export_objects(conn, type_name, Path(output))
@@ -553,8 +553,8 @@ def export_objects_cmd(ctx, type_name, output):
 @click.pass_context
 def export_checks_cmd(ctx, check_name, failed_only, output):
     """Export check results to CSV."""
-    from oneplm_ingestion.db import get_connection
-    from oneplm_ingestion.export import export_check_results
+    from ptc_syncer_ingestion.db import get_connection
+    from ptc_syncer_ingestion.export import export_check_results
 
     conn = get_connection(ctx.obj["db_path"])
     count = export_check_results(conn, Path(output), check_name=check_name, failed_only=failed_only)

@@ -19,14 +19,14 @@ import logging
 from datetime import datetime, timezone
 from pathlib import Path
 
-from oneplm_ingestion.db import (
+from ptc_syncer_ingestion.db import (
     get_object_by_id,
     get_objects_by_type,
     get_relationship_source_ids,
     get_relationship_targets,
     save_check_results,
 )
-from oneplm_ingestion.models import (
+from ptc_syncer_ingestion.models import (
     Assertion,
     AttributeCheck,
     CheckResult,
@@ -36,14 +36,14 @@ from oneplm_ingestion.models import (
     RelationshipComparison,
     WhenCondition,
 )
-from oneplm_ingestion.operators import (
+from ptc_syncer_ingestion.operators import (
     UNARY_OPERATORS,
     VALID_OPERATORS,
     compare,
     evaluate_when,
     get_attr_value,
 )
-from oneplm_ingestion.registry import get_check_function
+from ptc_syncer_ingestion.registry import get_check_function
 
 log = logging.getLogger(__name__)
 
@@ -458,7 +458,7 @@ def run_check(conn, check: Check) -> list[CheckResult]:
     if isinstance(check, PythonCheck):
         return run_python_check(conn, check)
     if isinstance(check, ExcelCompareCheck):
-        from oneplm_ingestion.excel_compare import run_excel_compare_check
+        from ptc_syncer_ingestion.excel_compare import run_excel_compare_check
 
         return run_excel_compare_check(conn, check)
     raise TypeError(f"Unsupported check type: {type(check).__name__}")

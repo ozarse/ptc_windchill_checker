@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from oneplm_ingestion.relationships import _resolve_uses
+from ptc_syncer_ingestion.relationships import _resolve_uses
 
 
 class _FakeClient:
@@ -34,8 +34,8 @@ def test_resolve_uses_preserves_link_attributes():
 
 
 def test_check_result_status_roundtrip(tmp_path):
-    from oneplm_ingestion.db import get_check_results, get_connection, init_db, save_check_results
-    from oneplm_ingestion.models import CheckResult
+    from ptc_syncer_ingestion.db import get_check_results, get_connection, init_db, save_check_results
+    from ptc_syncer_ingestion.models import CheckResult
 
     conn = get_connection(tmp_path / "t.db")
     init_db(conn)

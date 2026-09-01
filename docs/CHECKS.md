@@ -1,9 +1,9 @@
 # Checks Catalog
 
-Tracking document for every validation check in oneplm_ingestion. Checks are
+Tracking document for every validation check in ptc_syncer_ingestion. Checks are
 defined in [`config/checks.json`](../config/checks.json) and run with
-`oneplm check` (or `oneplm check --check <name>`). Results are written to the
-`check_results` table and exported with `oneplm export checks`.
+`ptc_syncer check` (or `ptc_syncer check --check <name>`). Results are written to the
+`check_results` table and exported with `ptc_syncer export checks`.
 
 There are three kinds:
 
@@ -44,14 +44,14 @@ and are reported separately in summaries and exports.
 
 | To run… | You must first run… |
 |---|---|
-| Relationship checks (4, 5, 6) and classification (8) | `oneplm sync relationships` |
-| PDF filename / language checks (7, 9) | `oneplm pdf download` (filename needs `--metadata-only` minimum) |
-| Last-page portion of language check (9) | `oneplm pdf extract` |
-| Version check (10) | `oneplm sync versions` |
-| Published-products check (11) | `oneplm sync relationships` **and** the publishing website's bulk export saved to `data/published_products.xlsx` |
+| Relationship checks (4, 5, 6) and classification (8) | `ptc_syncer sync relationships` |
+| PDF filename / language checks (7, 9) | `ptc_syncer pdf download` (filename needs `--metadata-only` minimum) |
+| Last-page portion of language check (9) | `ptc_syncer pdf extract` |
+| Version check (10) | `ptc_syncer sync versions` |
+| Published-products check (11) | `ptc_syncer sync relationships` **and** the publishing website's bulk export saved to `data/published_products.xlsx` |
 
 Checks that read PDF data are marked `"requires_pdf": true` in `config/checks.json`
-(currently 7 and 9). Run `oneplm check --skip-pdf` to exclude them when PDFs
+(currently 7 and 9). Run `ptc_syncer check --skip-pdf` to exclude them when PDFs
 haven't been downloaded. Add `"requires_pdf": true` to any check you author that
 depends on the `pdfs` table so it participates in `--skip-pdf`.
 
@@ -123,7 +123,7 @@ those parent types added to `config/types.json` and synced.
 ## Python checks
 
 ### 7. `ifu_drawing_pdf_filename` ✅ · `requires_pdf`
-Source: [`content_checks.py`](../src/oneplm_ingestion/content_checks.py) ·
+Source: [`content_checks.py`](../src/ptc_syncer_ingestion/content_checks.py) ·
 function `ifu_drawing_pdf_filename`
 
 Parses each IFU Drawing's primary-PDF filename
@@ -136,7 +136,7 @@ Parses each IFU Drawing's primary-PDF filename
 Skips drawings with no primary-PDF metadata.
 
 ### 8. `config_pdp_ifu_classification` 🟡
-Source: [`ifu_classification.py`](../src/oneplm_ingestion/ifu_classification.py) ·
+Source: [`ifu_classification.py`](../src/ptc_syncer_ingestion/ifu_classification.py) ·
 function `config_pdp_ifu_classification`
 
 For each Config PDP, inspects the IFU PDPs it **uses** and classifies by whether
@@ -164,12 +164,12 @@ attribute checks pass.
 > **not a Part attribute** — it is the PartUse usage-link quantity
 > (Config PDP `uses` IFU PDP). `sync relationships` now preserves the PartUse
 > link on each stored `uses` row under `UsesLink` in `attributes_json`
-> (re-run `oneplm sync relationships` to populate it), so the data is
+> (re-run `ptc_syncer sync relationships` to populate it), so the data is
 > available at `UsesLink.Quantity`; what remains is confirming the expected
 > quantity rule per classification and wiring it into this check.
 
 ### 9. `ifu_drawing_pdf_language` 🟡 · `requires_pdf`
-Source: [`content_checks.py`](../src/oneplm_ingestion/content_checks.py) ·
+Source: [`content_checks.py`](../src/ptc_syncer_ingestion/content_checks.py) ·
 function `ifu_drawing_pdf_language`
 
 Uses the language code parsed from the primary-PDF **filename** as the reference
@@ -181,7 +181,7 @@ and verifies it matches, for each IFU Drawing:
   (`TAIL_CHARS = 1200`) of the extracted PDF text
 
 If a drawing has no extracted text, the last-page row is a SKIP (pass) prompting
-`oneplm pdf extract`.
+`ptc_syncer pdf extract`.
 
 > 🟡 **Open — last-page reliability.** The stored text is one whole-document
 > markdown blob with no page boundaries, so "last page" is the last 1200 chars.
@@ -190,7 +190,7 @@ If a drawing has no extracted text, the last-page row is a SKIP (pass) prompting
 > tighter footer pattern or accurate per-page extraction if so.
 
 ### 10. `previous_versions_not_in_concept` 🟡
-Source: [`versions.py`](../src/oneplm_ingestion/versions.py) ·
+Source: [`versions.py`](../src/ptc_syncer_ingestion/versions.py) ·
 function `previous_versions_not_in_concept`
 
 For each object with stored version history, the **previous** (non-latest)
@@ -198,7 +198,7 @@ versions must not be in a concept-phase lifecycle state. Emits one row per objec
 that has previous versions: PASS if none are in concept, FAIL listing the
 offending version(s) otherwise. Objects with no previous versions are skipped.
 
-Version history is fetched by `oneplm sync versions` (calls the Windchill
+Version history is fetched by `ptc_syncer sync versions` (calls the Windchill
 `.../Versions` API for each object) and stored in the `versions` table, so the
 check runs offline. A version is judged "concept" if its `State.Value` **or**
 `State.Display` is in `CONCEPT_STATES` (matched case-insensitively).
@@ -214,7 +214,7 @@ check runs offline. A version is judged "concept" if its `State.Value` **or**
 ## Excel-compare checks
 
 ### 11. `published_products_match` 🟡
-Source: [`excel_compare.py`](../src/oneplm_ingestion/excel_compare.py) ·
+Source: [`excel_compare.py`](../src/ptc_syncer_ingestion/excel_compare.py) ·
 declared in `config/checks.json` (`kind: excel_compare`)
 
 Compares the products that use Config PDPs against the bulk export from the
@@ -256,7 +256,7 @@ prerequisites.
   README "Attribute Validation Checks" section for the full field reference.
 - **python:** write a function, decorate it with
   `@register_check("<name>")`, ensure its module is in `_BUILTIN_MODULES`
-  ([`registry.py`](../src/oneplm_ingestion/registry.py)), and add a
+  ([`registry.py`](../src/ptc_syncer_ingestion/registry.py)), and add a
   `{"kind": "python", "function": "<name>"}` entry to `config/checks.json`.
 
 When you add or change a check, update the summary table and add/adjust its

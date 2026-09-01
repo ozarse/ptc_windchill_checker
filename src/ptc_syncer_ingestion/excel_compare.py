@@ -19,8 +19,8 @@ import logging
 from datetime import datetime, timezone
 from pathlib import Path
 
-from oneplm_ingestion.db import get_object_by_id, get_objects_by_type, get_relationship_targets
-from oneplm_ingestion.models import CheckResult, ExcelCompareCheck
+from ptc_syncer_ingestion.db import get_object_by_id, get_objects_by_type, get_relationship_targets
+from ptc_syncer_ingestion.models import CheckResult, ExcelCompareCheck
 
 log = logging.getLogger(__name__)
 
@@ -145,7 +145,7 @@ def run_excel_compare_check(conn, check: ExcelCompareCheck) -> list[CheckResult]
         return [_row(
             "", "", "", "", None, None, True,
             f"SKIP: no 'used_by' relationships stored for any {check.type} — "
-            f"run 'oneplm sync relationships' first",
+            f"run 'ptc_syncer sync relationships' first",
             status="skip",
         )]
 

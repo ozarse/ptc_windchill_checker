@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import logging
 
-from oneplm_ingestion.db import save_relationships
+from ptc_syncer_ingestion.db import save_relationships
 
 log = logging.getLogger(__name__)
 

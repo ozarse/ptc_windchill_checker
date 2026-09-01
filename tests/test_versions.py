@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from oneplm_ingestion.db import (
+from ptc_syncer_ingestion.db import (
     get_connection,
     get_versions_for_object,
     init_db,
@@ -10,8 +10,8 @@ from oneplm_ingestion.db import (
     save_versions,
     upsert_object,
 )
-from oneplm_ingestion.models import WindchillObject
-from oneplm_ingestion.versions import check_previous_versions
+from ptc_syncer_ingestion.models import WindchillObject
+from ptc_syncer_ingestion.versions import check_previous_versions
 
 
 def _obj(oid, number):
@@ -104,7 +104,7 @@ def test_object_without_versions_skipped(tmp_path):
 
 
 def test_registered_via_engine(tmp_path):
-    from oneplm_ingestion.checks import run_all_checks
+    from ptc_syncer_ingestion.checks import run_all_checks
 
     conn = get_connection(tmp_path / "t.db")
     init_db(conn)

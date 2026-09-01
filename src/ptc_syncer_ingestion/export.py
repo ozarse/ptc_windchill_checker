@@ -6,7 +6,7 @@ import csv
 import json
 from pathlib import Path
 
-from oneplm_ingestion.db import get_all_objects, get_check_results, get_objects_by_type
+from ptc_syncer_ingestion.db import get_all_objects, get_check_results, get_objects_by_type
 
 
 def export_objects(conn, type_name: str | None, output_path: Path) -> int:

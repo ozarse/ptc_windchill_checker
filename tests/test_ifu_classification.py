@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from oneplm_ingestion import ifu_classification as ifc
-from oneplm_ingestion.db import get_connection, init_db, save_relationships, upsert_object
-from oneplm_ingestion.ifu_classification import (
+from ptc_syncer_ingestion import ifu_classification as ifc
+from ptc_syncer_ingestion.db import get_connection, init_db, save_relationships, upsert_object
+from ptc_syncer_ingestion.ifu_classification import (
     classify,
     classify_config_pdps,
     has_language_suffix,
 )
-from oneplm_ingestion.models import WindchillObject
+from ptc_syncer_ingestion.models import WindchillObject
 
 
 def _set_dotted(attrs: dict, dotted_key: str, value) -> None:
@@ -131,7 +131,7 @@ def test_hybrid_print_part_uses_piece_rules(tmp_path):
 
 
 def test_registered_and_runs_via_engine(tmp_path):
-    from oneplm_ingestion.checks import run_all_checks
+    from ptc_syncer_ingestion.checks import run_all_checks
 
     conn = get_connection(tmp_path / "t.db")
     init_db(conn)

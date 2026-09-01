@@ -18,8 +18,8 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
-from oneplm_ingestion.db import update_object_folder, upsert_folder, upsert_object
-from oneplm_ingestion.models import Folder, TypeConfig, WindchillObject
+from ptc_syncer_ingestion.db import update_object_folder, upsert_folder, upsert_object
+from ptc_syncer_ingestion.models import Folder, TypeConfig, WindchillObject
 
 log = logging.getLogger(__name__)
 
@@ -150,7 +150,7 @@ def _sync_folder_contents(
     Returns the number of objects stored.
     """
     # Deferred to avoid circular import
-    from oneplm_ingestion.sync import _classify_object, parse_windchill_object
+    from ptc_syncer_ingestion.sync import _classify_object, parse_windchill_object
 
     contents = client.get_folder_contents(container_id, folder_path)
     count = 0
